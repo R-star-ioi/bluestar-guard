@@ -75,6 +75,7 @@ var G = require('../boot.js');
           break;
         case 'gem':
           game.addXp(p.value);
+          if (G.Skills) G.Skills.onGemPickup(game);
           G.Audio.play('pick');
           break;
         case 'heart':

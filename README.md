@@ -2,11 +2,13 @@
 
 割草生存 × 塔防布阵 × 英雄合成（玩法参考《永远的蔚蓝星球》）。纯 Canvas 2D 原生实现，零引擎、零美术素材、零第三方依赖。
 
-[![在线试玩](https://img.shields.io/badge/-%E5%9C%A8%E7%BA%BF%E8%AF%95%E7%8E%A9-blue?style=for-the-badge)](https://r-star-ioi.github.io/bluestar-guard/) [![版本](https://img.shields.io/badge/版本-v0.2.1-green)](https://github.com/R-star-ioi/bluestar-guard/releases)
+[![在线试玩](https://img.shields.io/badge/-%E5%9C%A8%E7%BA%BF%E8%AF%95%E7%8E%A9-blue?style=for-the-badge)](https://r-star-ioi.github.io/bluestar-guard/) [![版本](https://img.shields.io/badge/版本-v0.3.0-green)](https://github.com/R-star-ioi/bluestar-guard/releases)
 
 > 🎮 **点这里直接玩**：<https://r-star-ioi.github.io/bluestar-guard/>（电脑/手机浏览器均可，无需安装）
 
 **v0.2.0 新增 · 局外成长**：主页「英雄」页可选 5 位主角（弓手/剑士/法师/牧师/炮手，攻击方式各异），对局中每捡 1 金币 = 1 升级金币，用于解锁新主角与升级属性（每级 生命+8% 攻击+6% 攻速+4% 移速+2%，满级 Lv10）。
+
+**v0.3.0 新增 · 附加技能**：升级时双重选择——先选 1 个属性强化，再选 1 个附加技能（最多持有 3 个，每个 5 级满级质变）：星环脉冲（环绕清怪→耀星环灼烧）/ 时空残影（万影随行）/ 晶盾回响（晶爆神盾）/ 贪婪磁核（引力漩涡）/ 崩解爆弹（连环崩解）。
 
 ![玩法](docs/开发计划.md)
 

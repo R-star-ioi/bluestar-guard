@@ -30,10 +30,10 @@ var G = require('../boot.js');
     },
 
     // ---- 派生属性：主角基础 × 局内三选一加成 ----
-    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk); },
-    interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed); },
-    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1); },
-    pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45); },
+    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1); },
+    interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
+    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
 
     update: function (dt, game) {
       if (Player.dead) return;
@@ -134,6 +134,11 @@ var G = require('../boot.js');
 
     damage: function (dmg, game) {
       if (Player.dead) return;
+      // 晶盾回响：先结算护盾吸收
+      if (G.Skills) {
+        dmg = G.Skills.absorbDamage(dmg, game);
+        if (dmg <= 0.01) return;
+      }
       Player.hp -= dmg;
       G.FX.text(Player.x, Player.y - 22, '-' + Math.round(dmg), '#ff6b6b', 13);
       G.FX.burst(Player.x, Player.y, 4, '#ff5252', 100, 0.35, 3);

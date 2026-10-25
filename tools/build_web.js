@@ -18,6 +18,7 @@ var FILES = [
   'js/entities/pickup.js',
   'js/entities/projectile.js',
   'js/entities/player.js',
+  'js/entities/skills.js',
   'js/entities/enemy.js',
   'js/entities/hero.js',
   'js/systems/waves.js',

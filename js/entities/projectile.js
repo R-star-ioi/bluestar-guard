@@ -43,6 +43,7 @@ var G = require('../boot.js');
         var rr = e.r + p.size;
         if (U.dist2(p.x, p.y, e.x, e.y) <= rr * rr) {
           game.damageEnemy(e, p.dmg, p.x, p.y, p.kind === 'cannonball');
+          if (p.echo && G.Skills) G.Skills._echoOnHit(e, game, G.Skills.levelOf('echo'));
           if (p.hitSet) p.hitSet.push(e);
           if (p.pierce > 0) {
             p.pierce--;

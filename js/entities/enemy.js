@@ -86,6 +86,18 @@ var G = require('../boot.js');
         if (e.dead) { list.splice(i, 1); continue; }
         if (e.hitT > 0) e.hitT -= dt;
         e.wobT += dt;
+        if (e.orbT > 0) e.orbT -= dt;
+        if (e.slowT > 0) e.slowT -= dt;
+        if (e.stunT > 0) e.stunT -= dt;
+        // 击退
+        if (e.kbX || e.kbY) {
+          e.x += (e.kbX || 0) * dt;
+          e.y += (e.kbY || 0) * dt;
+          var kdec = Math.pow(0.01, dt);
+          e.kbX *= kdec; e.kbY *= kdec;
+          if (Math.abs(e.kbX) < 2) e.kbX = 0;
+          if (Math.abs(e.kbY) < 2) e.kbY = 0;
+        }
 
         // 目标选择
         var tx, ty, targetingPlayer = false;
@@ -131,17 +143,19 @@ var G = require('../boot.js');
           }
         }
 
-        if (d > stopDist) {
-          var sp = e.speed;
-          e.x += (dx / d * sp + sepX) * dt;
-          e.y += (dy / d * sp + sepY) * dt;
-        } else if (sepX || sepY) {
-          e.x += sepX * dt; e.y += sepY * dt;
+        var sp = e.speed * (e.slowT > 0 ? 0.55 : 1);
+        if (e.stunT <= 0) {
+          if (d > stopDist) {
+            e.x += (dx / d * sp + sepX) * dt;
+            e.y += (dy / d * sp + sepY) * dt;
+          } else if (sepX || sepY) {
+            e.x += sepX * dt; e.y += sepY * dt;
+          }
         }
 
-        // 攻击
+        // 攻击（眩晕时不攻击）
         e.atkT -= dt;
-        if (e.atkT <= 0) {
+        if (e.atkT <= 0 && e.stunT <= 0) {
           if (targetingPlayer && d <= targetR + 6) {
             e.atkT = 1.0;
             pl.damage(e.dmg, game);
@@ -156,7 +170,7 @@ var G = require('../boot.js');
         }
 
         // 远程敌人射击
-        if (sh && sh.shootRange && !pl.dead) {
+        if (sh && sh.shootRange && !pl.dead && e.stunT <= 0) {
           e.shootT -= dt;
           if (e.shootT <= 0 && dPlayer < sh.shootRange * sh.shootRange) {
             e.shootT = sh.shootInterval;
@@ -269,6 +283,13 @@ var G = require('../boot.js');
           ctx.font = Math.floor(e.r * 0.8) + 'px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText('👑', sx, sy - e.r - 6);
+        }
+
+        // 眩晕标记
+        if (e.stunT > 0) {
+          ctx.font = '12px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('✦', sx, sy - e.r - 12);
         }
 
         // 血条

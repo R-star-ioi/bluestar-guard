@@ -12,6 +12,7 @@ require('./js/entities/fx.js');
 require('./js/entities/pickup.js');
 require('./js/entities/projectile.js');
 require('./js/entities/player.js');
+require('./js/entities/skills.js');
 require('./js/entities/enemy.js');
 require('./js/entities/hero.js');
 require('./js/systems/waves.js');

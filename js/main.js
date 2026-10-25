@@ -17,6 +17,9 @@ var G = require('./boot.js');
     best: { wave: 0, kills: 0 },
     baseDead: false,
     viewOx: 0, viewOy: 0,
+    pendingLevels: 0,
+    levelUpPhase: 'stat',
+    skillPickOptions: [],
 
     init: function () {
       G.Input.init();
@@ -54,6 +57,8 @@ var G = require('./boot.js');
       Game.baseDead = false;
       Game.msg = null;
       Game.metaEarned = 0;
+      Game.pendingLevels = 0;
+      G.Skills.reset();
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
       G.Waves.reset();
       G.Player.reset();
@@ -134,10 +139,14 @@ var G = require('./boot.js');
         Game.xp -= Game.xpNext;
         Game.level++;
         Game.xpNext = Math.round(5 * Math.pow(1.28, Game.level - 1));
+        Game.pendingLevels++;
+      }
+      if (Game.pendingLevels > 0 && Game.state === 'playing') {
         Game.openLevelUp();
       }
     },
 
+    // 两阶段升级：先选属性强化，再选附加技能
     openLevelUp: function () {
       // 从未满级技能中随机3个
       var pool = [];
@@ -164,6 +173,7 @@ var G = require('./boot.js');
         opts.push({ id: fb.id, name: fb.name, icon: fb.icon, desc: fb.desc(), isFallback: true });
       }
       Game.levelUpOptions = opts;
+      Game.levelUpPhase = 'stat';
       Game.setState('levelup');
       G.Audio.play('levelup');
     },
@@ -182,7 +192,27 @@ var G = require('./boot.js');
       }
       G.Audio.play('upgrade');
       G.FX.ring(G.Player.x, G.Player.y, '#ffd700', 50, 0.45, 3);
-      Game.setState('playing');
+      // 进入附加技能选择阶段
+      Game.skillPickOptions = G.Skills.options();
+      if (Game.skillPickOptions.length === 0) {
+        Game.finishLevelUp();
+        return;
+      }
+      Game.levelUpPhase = 'skill';
+    },
+
+    chooseSkill: function (id) {
+      G.Skills.choose(id);
+      Game.finishLevelUp();
+    },
+
+    finishLevelUp: function () {
+      Game.pendingLevels--;
+      if (Game.pendingLevels > 0) {
+        Game.openLevelUp(); // 还有待处理的升级
+      } else {
+        Game.setState('playing');
+      }
     },
 
     // ============ 战斗辅助 ============
@@ -211,6 +241,7 @@ var G = require('./boot.js');
 
     onKill: function (e) {
       Game.kills++;
+      G.Skills.onKill(e, Game);
       if (e.boss) {
         Game.showMsg('BOSS 击败！', '#ffd700', 2);
         G.Camera.shake(8, 0.4);
@@ -363,6 +394,7 @@ var G = require('./boot.js');
       G.Hero.update(dt, Game);
       G.Proj.update(dt, Game);
       G.Pickup.update(dt, Game);
+      G.Skills.update(dt, Game);
       G.FX.update(dt);
       G.Camera.update(dt, G.Player.x, G.Player.y);
 
@@ -399,6 +431,7 @@ var G = require('./boot.js');
       G.Hero.draw(ctx, ox, oy);
       G.Enemy.draw(ctx, ox, oy);
       G.Player.draw(ctx, ox, oy);
+      G.Skills.draw(ctx, ox, oy);
       G.Proj.draw(ctx, ox, oy);
       G.FX.draw(ctx, ox, oy);
       // 拖拽合成预览

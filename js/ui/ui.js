@@ -163,6 +163,23 @@ var G = require('../boot.js');
         game.repairBase();
       }, !needRepair || game.gold < repairCost);
 
+      // 附加技能栏
+      var owned = Object.keys(G.Skills.owned);
+      for (var si = 0; si < owned.length; si++) {
+        var sid = owned[si];
+        var sui = UI.SKILL_UI[sid];
+        var slv = G.Skills.owned[sid];
+        var px0 = 10 + si * 66, py0 = H - bh - 34;
+        UI.pill(ctx, px0, py0, 62, 20, 'rgba(10,16,40,0.8)', 10);
+        ctx.strokeStyle = sui.color;
+        ctx.lineWidth = 1;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px0 + 0.5, py0 + 0.5, 61, 19, 10); ctx.stroke(); }
+        ctx.fillStyle = sui.color;
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(sui.ch + ' ' + slv + (slv >= 5 ? '★' : ''), px0 + 31, py0 + 14);
+      }
+
       // 摇杆
       var j = G.Input.joystick;
       if (j.active) {
@@ -196,6 +213,7 @@ var G = require('../boot.js');
 
     // ================= 升级三选一 =================
     drawLevelUp: function (ctx, game) {
+      if (game.levelUpPhase === 'skill') { UI.drawSkillPick(ctx, game); return; }
       var W = G.P.screenW, H = G.P.screenH;
       ctx.fillStyle = 'rgba(4,8,24,0.78)';
       ctx.fillRect(0, 0, W, H);
@@ -248,6 +266,72 @@ var G = require('../boot.js');
             game.applyLevelUp(opt);
           });
         })(o);
+      }
+    },
+
+    // ================= 附加技能选择 =================
+    SKILL_UI: {
+      star: { color: '#8fd9ff', ch: '星' },
+      echo: { color: '#a55eea', ch: '影' },
+      shield: { color: '#7ef9ff', ch: '盾' },
+      magnet: { color: '#ffd166', ch: '磁' },
+      bomb: { color: '#ff9f43', ch: '爆' }
+    },
+    drawSkillPick: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      ctx.fillStyle = 'rgba(30,16,52,0.82)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillStyle = '#bb8fce';
+      ctx.fillText('✦ 附加技能', W / 2, H * 0.15);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      var hint = G.Skills.count() >= D.ASKILL_MAX_COUNT ? '已持有 3 个技能，只能升级已有技能' : '与属性强化独立选择 · 最多持有 3 个';
+      ctx.fillText(hint, W / 2, H * 0.15 + 26);
+
+      var opts = game.skillPickOptions || [];
+      var cw = Math.min(340, W - 44), ch = 80;
+      var cy = H * 0.21;
+      for (var i = 0; i < opts.length; i++) {
+        var id = opts[i];
+        var a = D.ASKILLS[id];
+        var ui = UI.SKILL_UI[id];
+        var cur = G.Skills.levelOf(id);
+        var y = cy + i * (ch + 12);
+        var grad = ctx.createLinearGradient(0, y, 0, y + ch);
+        grad.addColorStop(0, 'rgba(64,48,110,0.95)');
+        grad.addColorStop(1, 'rgba(30,22,58,0.95)');
+        ctx.fillStyle = grad;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect((W - cw) / 2, y, cw, ch, 13); ctx.fill(); }
+        else ctx.fillRect((W - cw) / 2, y, cw, ch);
+        ctx.strokeStyle = ui.color;
+        ctx.lineWidth = 2;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect((W - cw) / 2, y, cw, ch, 13); ctx.stroke(); }
+        // 图标
+        ctx.fillStyle = ui.color;
+        ctx.beginPath();
+        ctx.arc((W - cw) / 2 + 36, y + ch / 2, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0a0a1e';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(ui.ch, (W - cw) / 2 + 36, y + ch / 2 + 6);
+        // 名称与等级
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(a.name, (W - cw) / 2 + 68, y + 30);
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = ui.color;
+        ctx.fillText(cur === 0 ? 'NEW · 学得 Lv1' : 'Lv' + cur + ' → Lv' + (cur + 1) + (cur + 1 === a.max ? ' 【质变】' : ''), (W - cw) / 2 + 68, y + 48);
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.78)';
+        ctx.fillText(a.desc(Math.min(cur + 1, a.max)), (W - cw) / 2 + 68, y + 66);
+        (function (sid) {
+          UI.reg('sk_' + sid, (W - cw) / 2, y, cw, ch, function () {
+            game.chooseSkill(sid);
+          });
+        })(id);
       }
     },
 
