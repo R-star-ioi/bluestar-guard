@@ -533,8 +533,140 @@ var G = require('../boot.js');
     BUFF_COST: 100, BUFF_GROWTH: 1.6, BUFF_PCT: 0.15
   };
 
-  D.VERSION = 'v0.1.0';
+  // ★ 主角（局外可选英雄）：基础属性 + 升级属性
+  D.PROTOS = {
+    archer: {
+      name: '弓手', cls: 'archer', color: '#4aa3ff',
+      desc: '均衡远程 · 默认解锁',
+      hp: 100, dmg: 10, interval: 0.5, speed: 190, range: 300, bulletSpeed: 560
+    },
+    sword: {
+      name: '剑士', cls: 'sword', color: '#e67e22',
+      desc: '高血近战 · 环形斩击',
+      hp: 140, dmg: 20, interval: 0.75, speed: 210, range: 130, melee: true
+    },
+    mage: {
+      name: '法师', cls: 'mage', color: '#a55eea',
+      desc: '火球溅射 · 生存偏弱',
+      hp: 90, dmg: 16, interval: 0.9, speed: 185, range: 320, bulletSpeed: 340, splash: 70
+    },
+    priest: {
+      name: '牧师', cls: 'priest', color: '#f1c40f',
+      desc: '圣光速射 · 自带回血',
+      hp: 130, dmg: 8, interval: 0.4, speed: 180, range: 280, bulletSpeed: 620,
+      regenBase: 0.5, regenPerLv: 0.25
+    },
+    cannon: {
+      name: '炮手', cls: 'cannon', color: '#e74c3c',
+      desc: '重炮清屏 · 攻速缓慢',
+      hp: 115, dmg: 42, interval: 2.0, speed: 175, range: 360, bulletSpeed: 260, splash: 100
+    }
+  };
+  D.META = {
+    PROTO_ORDER: ['archer', 'sword', 'mage', 'priest', 'cannon'],
+    UNLOCK: { archer: 0, sword: 600, mage: 1500, priest: 2500, cannon: 3500 },
+    UPG_BASE: 100,        // 升1级费用：100 × 1.5^(lv-1)
+    UPG_GROWTH: 1.5,
+    MAX_LV: 10,
+    // 每级升级属性加成
+    BONUS: { hp: 0.08, dmg: 0.06, aspeed: 0.04, speed: 0.02 }
+  };
+
+  D.VERSION = 'v0.2.0';
   G.D = D;
+})();
+
+});
+__def("js/core/meta.js", function (module, exports, require) {
+// 局外成长（Meta）：主角选择、升级金币、英雄解锁与升级
+var G = require('../boot.js');
+(function () {
+  var U = G.U, D = G.D;
+  var Meta = {
+    gold: 0,                          // 升级金币（局外钱包）
+    unlocked: { archer: true },
+    levels: { archer: 1 },
+    selected: 'archer',
+
+    load: function () {
+      var m = G.P.storage.get('lx_meta', null);
+      if (m) {
+        Meta.gold = m.gold || 0;
+        Meta.unlocked = m.unlocked || { archer: true };
+        Meta.levels = m.levels || { archer: 1 };
+        Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
+      }
+    },
+    save: function () {
+      G.P.storage.set('lx_meta', {
+        gold: Meta.gold, unlocked: Meta.unlocked,
+        levels: Meta.levels, selected: Meta.selected
+      });
+    },
+
+    // 对局金币 → 升级金币（1:1 即时累积）
+    earn: function (n) {
+      Meta.gold += n;
+    },
+
+    unlockCost: function (cls) { return D.META.UNLOCK[cls]; },
+    upgradeCost: function (cls) {
+      var lv = Meta.levels[cls] || 1;
+      return Math.round(D.META.UPG_BASE * Math.pow(D.META.UPG_GROWTH, lv - 1));
+    },
+    levelOf: function (cls) { return Meta.levels[cls] || 1; },
+
+    unlock: function (cls) {
+      if (Meta.unlocked[cls]) return false;
+      var c = D.META.UNLOCK[cls];
+      if (Meta.gold < c) { G.Audio.play('error'); return false; }
+      Meta.gold -= c;
+      Meta.unlocked[cls] = true;
+      Meta.levels[cls] = 1;
+      Meta.selected = cls;
+      Meta.save();
+      G.Audio.play('recruit');
+      return true;
+    },
+    upgrade: function (cls) {
+      var lv = Meta.levelOf(cls);
+      if (lv >= D.META.MAX_LV) { G.Audio.play('error'); return false; }
+      var c = Meta.upgradeCost(cls);
+      if (Meta.gold < c) { G.Audio.play('error'); return false; }
+      Meta.gold -= c;
+      Meta.levels[cls] = lv + 1;
+      Meta.save();
+      G.Audio.play('upgrade');
+      return true;
+    },
+    select: function (cls) {
+      if (!Meta.unlocked[cls]) return false;
+      Meta.selected = cls;
+      Meta.save();
+      G.Audio.play('button');
+      return true;
+    },
+
+    // 主角总属性 = 基础属性 × 升级加成
+    protoStats: function (cls) {
+      var p = D.PROTOS[cls];
+      var lv = Meta.levelOf(cls);
+      var k = lv - 1;
+      var B = D.META.BONUS;
+      var st = {
+        cls: cls, name: p.name, color: p.color, desc: p.desc, level: lv,
+        maxHp: Math.round(p.hp * (1 + B.hp * k)),
+        dmg: p.dmg * (1 + B.dmg * k),
+        interval: p.interval * (1 - B.aspeed * k),
+        speed: p.speed * (1 + B.speed * k),
+        range: p.range, bulletSpeed: p.bulletSpeed || 0,
+        splash: p.splash || 0, melee: !!p.melee,
+        regen: p.regenBase ? p.regenBase + p.regenPerLv * k : 0
+      };
+      return st;
+    }
+  };
+  G.Meta = Meta;
 })();
 
 });
@@ -1060,13 +1192,14 @@ var G = require('../boot.js');
 
 });
 __def("js/entities/player.js", function (module, exports, require) {
-// 玩家：移动 / 自动攻击 / 属性成长（升级技能加成）
+// 玩家：可选主角（局外英雄）+ 移动 / 自动攻击 / 属性成长（局内技能加成）
 var G = require('../boot.js');
 (function () {
   var U = G.U, D = G.D;
   var Player = {
     x: 0, y: 0, r: D.PLAYER.RADIUS,
     hp: D.PLAYER.HP, maxHp: D.PLAYER.HP,
+    cls: 'archer', proto: null,   // 当前主角与其总属性
     face: 1, // 朝向 1右 -1左
     attackTimer: 0,
     moving: false, walkT: 0,
@@ -1076,20 +1209,24 @@ var G = require('../boot.js');
     stats: null,
 
     reset: function () {
+      // 读取所选主角（局外成长）属性
+      Player.cls = G.Meta.selected;
+      Player.proto = G.Meta.protoStats(Player.cls);
       Player.x = D.MAP_W / 2 + 150;
       Player.y = D.MAP_H / 2 + 120;
-      Player.hp = D.PLAYER.HP;
-      Player.maxHp = D.PLAYER.HP;
+      Player.maxHp = Player.proto.maxHp;
+      Player.hp = Player.maxHp;
       Player.dead = false;
       Player.attackTimer = 0;
       Player.face = 1;
+      Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
       Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0 };
     },
 
-    // ---- 派生属性 ----
-    attack: function () { return D.PLAYER.ATTACK * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08); },
-    interval: function () { return D.PLAYER.INTERVAL * Math.pow(0.92, Player.stats.aspeed); },
-    speed: function () { return D.PLAYER.SPEED * (1 + Player.stats.speed * 0.1); },
+    // ---- 派生属性：主角基础 × 局内三选一加成 ----
+    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08); },
+    interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed); },
+    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1); },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45); },
 
     update: function (dt, game) {
@@ -1111,44 +1248,82 @@ var G = require('../boot.js');
       Player.y = U.clamp(Player.y, 20, D.MAP_H - 20);
       if (vx !== 0) Player.face = vx > 0 ? 1 : -1;
 
-      // 回血
-      if (Player.stats.regen > 0 && Player.hp < Player.maxHp) {
-        Player.hp = Math.min(Player.maxHp, Player.hp + Player.stats.regen * dt);
+      // 回血（牧师天赋 + 恢复光环技能）
+      var regen = (Player.proto.regen || 0) + Player.stats.regen;
+      if (regen > 0 && Player.hp < Player.maxHp) {
+        Player.hp = Math.min(Player.maxHp, Player.hp + regen * dt);
       }
 
       // 自动攻击：找射程内最近敌人
       Player.attackTimer -= dt;
       if (Player.attackTimer <= 0) {
-        var target = game.findNearestEnemy(Player.x, Player.y, D.PLAYER.RANGE);
+        var target = game.findNearestEnemy(Player.x, Player.y, Player.proto.range);
         if (target) {
           Player.attackTimer = Player.interval();
-          Player.shoot(game, target);
+          if (Player.proto.melee) Player.melee(game, target);
+          else Player.shoot(game, target);
         } else {
           Player.attackTimer = 0.05; // 空窗快速轮询
         }
       }
     },
 
+    // 近战环斩（剑士）
+    melee: function (game, target) {
+      var range = Player.proto.range;
+      G.FX.ring(Player.x, Player.y, Player.proto.color, range, 0.22, 3);
+      var near = game.grid.query(Player.x, Player.y, range + 30);
+      var seen = {};
+      var hitAny = false;
+      for (var k = 0; k < near.length; k++) {
+        var e = near[k];
+        if (e.dead || seen[e.x + '_' + e.y]) continue;
+        seen[e.x + '_' + e.y] = 1;
+        if (U.dist2(Player.x, Player.y, e.x, e.y) <= (range + e.r) * (range + e.r)) {
+          var ang = U.angle(Player.x, Player.y, e.x, e.y);
+          game.damageEnemy(e, Player.attack(), e.x, e.y, false);
+          G.FX.spray(e.x, e.y, ang, 3, '#ffd9a0', 130, 0.3, 3);
+          hitAny = true;
+        }
+      }
+      // 面向最近目标
+      Player.face = target.x >= Player.x ? 1 : -1;
+      if (hitAny) G.Audio.play('hit');
+      else G.Audio.play('shoot');
+    },
+
+    // 远程射击（弓手/法师/牧师/炮手）
     shoot: function (game, target) {
       var n = 1 + Player.stats.multi;
       var baseAng = U.angle(Player.x, Player.y, target.x, target.y);
       var spread = 0.14;
+      var p = Player.proto;
+      var kind = 'bullet', color = p.color;
+      if (Player.cls === 'mage') kind = 'fireball';
+      else if (Player.cls === 'cannon') kind = 'cannonball';
+      else if (Player.cls === 'priest') color = '#ffeaa7';
+      var size = 4 * (1 + Player.stats.bigshot * 0.3);
+      if (kind === 'fireball') size += 2;
+      if (kind === 'cannonball') size += 4;
       for (var i = 0; i < n; i++) {
         var ang = baseAng + (i - (n - 1) / 2) * spread;
         G.Proj.spawn({
           x: Player.x, y: Player.y - 6,
           ang: ang,
-          speed: 560,
+          speed: p.bulletSpeed || 560,
           dmg: Player.attack(),
           pierce: Player.stats.pierce,
-          size: 4 * (1 + Player.stats.bigshot * 0.3),
-          color: '#4fc3f7',
+          size: size,
+          color: color,
           friendly: true,
-          life: D.PLAYER.RANGE / 560 + 0.15
+          splash: p.splash,
+          life: (p.range + 60) / (p.bulletSpeed || 560),
+          kind: kind
         });
       }
+      Player.face = baseAng >= -Math.PI / 2 && baseAng <= Math.PI / 2 ? 1 : -1;
       G.Audio.play('shoot');
-      G.FX.spray(Player.x + Math.cos(baseAng) * 14, Player.y - 6 + Math.sin(baseAng) * 14, baseAng, 2, '#8fd9ff', 90, 0.25, 2.5);
+      G.FX.spray(Player.x + Math.cos(baseAng) * 14, Player.y - 6 + Math.sin(baseAng) * 14, baseAng, 2, color, 90, 0.25, 2.5);
     },
 
     damage: function (dmg, game) {
@@ -1173,21 +1348,19 @@ var G = require('../boot.js');
       Player.hp = Math.min(Player.maxHp, Player.hp + v);
     },
 
-    gainXpCheckLevel: function () { },
-
     draw: function (ctx, ox, oy) {
       if (Player.dead) return;
       var sx = Player.x - ox, sy = Player.y - oy;
+      var col = Player.proto ? Player.proto.color : '#4aa3ff';
       // 影子
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.beginPath();
       ctx.ellipse(sx, sy + Player.r * 0.85, Player.r * 0.9, Player.r * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
-      // 无敌/受伤闪烁由 main 控制透明度
       var bob = Player.moving ? Math.sin(Player.walkT) * 2 : 0;
-      // 身体
-      ctx.fillStyle = '#4aa3ff';
-      ctx.strokeStyle = '#1b4f8a';
+      // 身体（颜色随主角）
+      ctx.fillStyle = col;
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(sx, sy + bob, Player.r, 0, Math.PI * 2);
@@ -1200,13 +1373,31 @@ var G = require('../boot.js');
       var ex = sx + Player.face * 4;
       ctx.fillRect(ex - 3.5, sy - 4 + bob, 3, 3.5);
       ctx.fillRect(ex + 1.5, sy - 4 + bob, 3, 3.5);
-      // 枪
-      ctx.strokeStyle = '#cfd8dc';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(sx + Player.face * 6, sy + bob);
-      ctx.lineTo(sx + Player.face * 17, sy - 2 + bob);
-      ctx.stroke();
+      // 武器
+      if (Player.proto && Player.proto.melee) {
+        // 剑
+        ctx.strokeStyle = '#e8eef4';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(sx + Player.face * 8, sy + 4 + bob);
+        ctx.lineTo(sx + Player.face * 22, sy - 10 + bob);
+        ctx.stroke();
+        ctx.strokeStyle = '#c9a227';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(sx + Player.face * 6, sy + 1 + bob);
+        ctx.lineTo(sx + Player.face * 13, sy - 6 + bob);
+        ctx.stroke();
+      } else {
+        // 枪/法杖
+        ctx.strokeStyle = Player.cls === 'mage' ? '#8e44ad' : (Player.cls === 'priest' ? '#d4b106' : '#cfd8dc');
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(sx + Player.face * 6, sy + bob);
+        ctx.lineTo(sx + Player.face * 17, sy - 2 + bob);
+        ctx.stroke();
+      }
     }
   };
   G.Player = Player;
@@ -2287,23 +2478,31 @@ var G = require('../boot.js');
       ctx.textAlign = 'center';
       ctx.font = 'bold 44px sans-serif';
       ctx.fillStyle = '#8fd3ff';
-      ctx.fillText('蓝星守卫', W / 2, H * 0.2);
+      ctx.fillText('蓝星守卫', W / 2, H * 0.18);
       ctx.font = '13px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText('割草 × 塔防 × 英雄合成', W / 2, H * 0.2 + 34);
+      ctx.fillText('割草 × 塔防 × 英雄合成', W / 2, H * 0.18 + 32);
       // 水晶装饰
-      ctx.font = '40px sans-serif';
-      ctx.fillText('💎', W / 2, H * 0.32 + Math.sin(t * 2) * 6);
+      ctx.font = '36px sans-serif';
+      ctx.fillText('💎', W / 2, H * 0.28 + Math.sin(t * 2) * 6);
 
-      UI.button(ctx, 'start', W / 2 - 100, H * 0.45, 200, 58, '▶ 开始游戏', null, '#2d6cdf', function () {
+      UI.button(ctx, 'start', W / 2 - 100, H * 0.38, 200, 56, '▶ 开始游戏', null, '#2d6cdf', function () {
         game.startRun();
       });
-
-      // 最佳纪录
+      // 英雄按钮（局外成长）
+      UI.button(ctx, 'heroes', W / 2 - 100, H * 0.38 + 66, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
+        G.Audio.play('button');
+        game.setState('heroes');
+      });
+      // 当前主角 + 升级金币 + 纪录（合并两行，避免与说明重叠）
+      var sel = G.Meta.protoStats(G.Meta.selected);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, H * 0.38 + 146);
       var best = game.best;
       ctx.font = '12px sans-serif';
       ctx.fillStyle = 'rgba(255,215,0,0.85)';
-      ctx.fillText('👑 最佳纪录：第 ' + best.wave + ' 波 · 击杀 ' + best.kills, W / 2, H * 0.45 + 92);
+      ctx.fillText('👑 最佳纪录：第 ' + best.wave + ' 波 · 击杀 ' + best.kills, W / 2, H * 0.38 + 170);
 
       // 玩法说明
       ctx.font = '11px sans-serif';
@@ -2312,14 +2511,136 @@ var G = require('../boot.js');
         '拖动屏幕移动，自动攻击',
         '金币招募英雄守卫水晶 · 同名同级英雄拖拽合成',
         '升级三选一随机技能 · 每5波BOSS来袭',
-        '保护好基地水晶！'
+        '捡到的金币可在「英雄」页升级主角属性'
       ];
       for (var li = 0; li < lines.length; li++) {
-        ctx.fillText(lines[li], W / 2, H * 0.62 + li * 20);
+        ctx.fillText(lines[li], W / 2, H * 0.38 + 200 + li * 18);
       }
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
       ctx.fillText(D.VERSION + ' · 浏览器预览版（微信小游戏同源代码）', W / 2, H - 18);
+    },
+
+    // ================= 英雄选择与升级（局外成长） =================
+    drawHeroes: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0a1030');
+      grad.addColorStop(1, '#1a1440');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // 顶栏
+      UI.button(ctx, 'back', 12, 12, 88, 40, '‹ 返回', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState('menu');
+      });
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('英雄', W / 2, 42);
+      UI.pill(ctx, W - 128, 16, 116, 30, 'rgba(0,0,0,0.45)', 15);
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText('升级金币 ' + G.Meta.gold, W - 70, 35);
+
+      var B = D.META.BONUS;
+      var ch = 126, gap = 8;
+      var y0 = 64;
+      for (var i = 0; i < D.META.PROTO_ORDER.length; i++) {
+        var cls = D.META.PROTO_ORDER[i];
+        var p = D.PROTOS[cls];
+        var unlocked = !!G.Meta.unlocked[cls];
+        var lv = G.Meta.levelOf(cls);
+        var st = G.Meta.protoStats(cls);
+        var selected = G.Meta.selected === cls;
+        var y = y0 + i * (ch + gap);
+        var cw = W - 24, x = 12;
+
+        // 卡片底
+        var cardGrad = ctx.createLinearGradient(0, y, 0, y + ch);
+        if (selected) {
+          cardGrad.addColorStop(0, 'rgba(64,84,158,0.97)');
+          cardGrad.addColorStop(1, 'rgba(28,40,86,0.97)');
+        } else {
+          cardGrad.addColorStop(0, 'rgba(40,52,96,0.95)');
+          cardGrad.addColorStop(1, 'rgba(18,26,58,0.95)');
+        }
+        ctx.fillStyle = cardGrad;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, cw, ch, 14); ctx.fill(); }
+        else ctx.fillRect(x, y, cw, ch);
+        ctx.strokeStyle = selected ? 'rgba(255,209,102,0.9)' : 'rgba(130,170,255,0.4)';
+        ctx.lineWidth = selected ? 2.5 : 1.5;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, cw, ch, 14); ctx.stroke(); }
+        if (!unlocked) {
+          ctx.fillStyle = 'rgba(4,8,24,0.55)';
+          if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, cw, ch, 14); ctx.fill(); }
+          else ctx.fillRect(x, y, cw, ch);
+        }
+
+        // 图标 + 名称
+        ctx.globalAlpha = unlocked ? 1 : 0.35;
+        G.Hero.drawIcon(ctx, cls, x + 34, y + 38, 1.5);
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(p.name, x + 62, y + 30);
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText(p.desc, x + 62, y + 48);
+        // 属性（基础+升级合成）
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.88)';
+        var aps = (1 / st.interval).toFixed(1);
+        ctx.fillText('生命 ' + st.maxHp + '   攻击 ' + st.dmg.toFixed(1) + '   攻速 ' + aps + '/s', x + 62, y + 70);
+        if (unlocked) {
+          var k = lv - 1;
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = '#7bed9f';
+          ctx.fillText(k > 0 ? ('Lv' + lv + ' · 生命+' + Math.round(B.hp * k * 100) + '% 攻击+' + Math.round(B.dmg * k * 100) + '% 攻速+' + Math.round(B.aspeed * k * 100) + '%') : 'Lv1 · 基础形态', x + 62, y + 90);
+        } else {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = '#ffd166';
+          ctx.fillText('🔒 未解锁', x + 62, y + 90);
+        }
+        ctx.globalAlpha = 1;
+
+        // 按钮
+        var bw = 96, bh = 40;
+        var by = y + ch - bh - 10;
+        if (!unlocked) {
+          var uc = G.Meta.unlockCost(cls);
+          UI.button(ctx, 'unl_' + cls, x + cw - bw - 14, y + (ch - bh) / 2, bw, bh, '解锁', '💰' + uc, '#8e44ad', (function (c) {
+            return function () {
+              if (G.Meta.unlock(c)) game.toast('已解锁 ' + D.PROTOS[c].name + '！');
+              else game.toast('升级金币不足');
+            };
+          })(cls), G.Meta.gold < uc);
+        } else {
+          // 选择
+          if (selected) {
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillStyle = '#ffd166';
+            ctx.fillText('✓ 使用中', x + cw - bw - 14 + bw / 2, by + bh / 2 + 4);
+          } else {
+            UI.button(ctx, 'sel_' + cls, x + cw - bw - 14, by, bw, bh, '选择', null, '#2d6cdf', (function (c) {
+              return function () { G.Meta.select(c); };
+            })(cls));
+          }
+          // 升级
+          var maxed = lv >= D.META.MAX_LV;
+          var upCost = G.Meta.upgradeCost(cls);
+          UI.button(ctx, 'mup_' + cls, x + cw - bw * 2 - 24, by, bw, bh, '升级',
+            maxed ? '已满级' : '💰' + upCost, '#27ae60',
+            (function (c) {
+              return function () {
+                if (G.Meta.upgrade(c)) game.toast(D.PROTOS[c].name + ' 升到 Lv' + G.Meta.levelOf(c) + '！');
+                else game.toast('升级金币不足');
+              };
+            })(cls), maxed || G.Meta.gold < upCost);
+        }
+      }
     },
 
     // ================= 结算 =================
@@ -2332,26 +2653,27 @@ var G = require('../boot.js');
       ctx.fillStyle = '#ff6b6b';
       ctx.fillText(game.baseDead ? '🏰 基地陷落' : '💀 你倒下了', W / 2, H * 0.2);
 
-      var pw = Math.min(320, W - 60), px = (W - pw) / 2, py = H * 0.3;
+      var pw = Math.min(320, W - 60), px = (W - pw) / 2, py = H * 0.26;
       ctx.fillStyle = 'rgba(14,22,52,0.95)';
-      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, 190, 16); ctx.fill(); }
-      else ctx.fillRect(px, py, pw, 190);
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, 225, 16); ctx.fill(); }
+      else ctx.fillRect(px, py, pw, 225);
 
       var rows = [
         ['坚守波次', '第 ' + G.Waves.wave + ' 波'],
         ['击杀敌人', String(game.kills)],
         ['存活时间', U.fmtTime(game.playTime)],
-        ['英雄等级', String(game.level)]
+        ['英雄等级', String(game.level)],
+        ['升级金币', '+' + (game.metaEarned || 0)]
       ];
       for (var i = 0; i < rows.length; i++) {
-        var ry = py + 36 + i * 36;
+        var ry = py + 34 + i * 34;
         ctx.textAlign = 'left';
         ctx.font = '13px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.65)';
         ctx.fillText(rows[i][0], px + 30, ry);
         ctx.textAlign = 'right';
         ctx.font = 'bold 16px sans-serif';
-        ctx.fillStyle = '#ffd166';
+        ctx.fillStyle = rows[i][0] === '升级金币' ? '#7bed9f' : '#ffd166';
         ctx.fillText(rows[i][1], px + pw - 30, ry);
       }
       var isBest = G.Waves.wave >= game.best.wave && game.kills >= game.best.kills && game.kills > 0;
@@ -2359,13 +2681,16 @@ var G = require('../boot.js');
         ctx.textAlign = 'center';
         ctx.font = 'bold 14px sans-serif';
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('🎉 新纪录！', W / 2, py + 178);
+        ctx.fillText('🎉 新纪录！', W / 2, py + 205);
       }
 
-      UI.button(ctx, 'retry', W / 2 - 110, py + 220, 220, 52, '↻ 再来一局', null, '#2d6cdf', function () {
+      UI.button(ctx, 'retry', W / 2 - 110, py + 250, 220, 52, '↻ 再来一局', null, '#2d6cdf', function () {
         game.startRun();
       });
-      UI.button(ctx, 'home', W / 2 - 110, py + 284, 220, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
+      UI.button(ctx, 'toheroes', W / 2 - 110, py + 314, 220, 46, '🦸 升级英雄', '+' + (game.metaEarned || 0) + ' 升级金币', '#8e44ad', function () {
+        game.setState('heroes');
+      });
+      UI.button(ctx, 'home', W / 2 - 110, py + 372, 220, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
         game.setState('menu');
       });
     },
@@ -2401,6 +2726,7 @@ var G = require('../boot.js');
       UI.begin();
       switch (game.state) {
         case 'menu': UI.drawMenu(ctx, game); break;
+        case 'heroes': UI.drawHeroes(ctx, game); break;
         case 'playing':
           UI.drawHud(ctx, game);
           if (game.panelHero) UI.drawHeroPanel(ctx, game);
@@ -2442,6 +2768,7 @@ var G = require('./boot.js');
 
     init: function () {
       G.Input.init();
+      G.Meta.load();
       Game.best = G.P.storage.get('lx_best', { wave: 0, kills: 0 });
       var snd = G.P.storage.get('lx_sound', 1);
       G.Audio.enabled = !!snd;
@@ -2474,6 +2801,7 @@ var G = require('./boot.js');
       Game.panelHero = null;
       Game.baseDead = false;
       Game.msg = null;
+      Game.metaEarned = 0;
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
       G.Waves.reset();
       G.Player.reset();
@@ -2495,8 +2823,18 @@ var G = require('./boot.js');
       Game.msg = { text: text, color: color || '#ffd166', t: life || 2, life: life || 2 };
     },
 
+    toast: function (text) {
+      Game.showMsg(text, '#7bed9f', 1.4);
+      G.Audio.play('button');
+    },
+
     // ============ 经济 ============
-    addGold: function (n) { Game.gold += n; },
+    addGold: function (n) {
+      Game.gold += n;
+      // 局内金币同步累积为局外「升级金币」（1:1）
+      Game.metaEarned = (Game.metaEarned || 0) + n;
+      G.Meta.earn(n);
+    },
     buffCost: function () { return Math.round(D.ECONOMY.BUFF_COST * Math.pow(D.ECONOMY.BUFF_GROWTH, Game.buffLevel)); },
     buyBuff: function () {
       var cost = Game.buffCost();
@@ -2638,6 +2976,7 @@ var G = require('./boot.js');
       // 波奖励
       Game.addGold(5 + w);
       G.FX.text(Game.base.x, Game.base.y - 70, '波次奖励 +' + (5 + w) + '💰', '#ffd700', 15);
+      G.Meta.save(); // 波次结束存档升级金币
     },
 
     gameOver: function () {
@@ -2646,17 +2985,18 @@ var G = require('./boot.js');
         Game.best = { wave: G.Waves.wave, kills: Game.kills };
         G.P.storage.set('lx_best', Game.best);
       }
+      G.Meta.save(); // 结算存档升级金币
       G.Audio.play('gameover');
       Game.setState('gameover');
     },
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
-      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'paused') return;
+      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'gameover' || Game.state === 'paused') return;
       // 去重：部分环境同一指针的 start 会双发，80ms 内忽略重复
       var now = Date.now();
       if (!Game._tapAt) Game._tapAt = {};
-      if (Game._tapAt[id] && now - Game._tapAt[id] < 80) return;
+      if (Game._tapAt[id] && now - Game._tapAt[id] < 150) return;
       Game._tapAt[id] = now;
       // 英雄面板打开时，点面板外关闭
       if (Game.panelHero) {
@@ -2783,8 +3123,8 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover') {
-        // 菜单/结算只画背景层
+      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes') {
+        // 菜单/英雄/结算只画背景层
         if (Game.state === 'gameover') {
           G.Bg.draw(ctx, ox, oy);
           G.Bg.drawBase(ctx, Game.base, ox, oy);
@@ -2857,6 +3197,7 @@ try {
   __req("", "./js/core/camera.js");
   __req("", "./js/core/audio.js");
   __req("", "./js/config/data.js");
+  __req("", "./js/core/meta.js");
   __req("", "./js/core/bg.js");
   __req("", "./js/entities/fx.js");
   __req("", "./js/entities/pickup.js");

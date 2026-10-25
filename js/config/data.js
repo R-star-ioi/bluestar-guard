@@ -136,6 +136,45 @@ var G = require('../boot.js');
     BUFF_COST: 100, BUFF_GROWTH: 1.6, BUFF_PCT: 0.15
   };
 
-  D.VERSION = 'v0.1.0';
+  // ★ 主角（局外可选英雄）：基础属性 + 升级属性
+  D.PROTOS = {
+    archer: {
+      name: '弓手', cls: 'archer', color: '#4aa3ff',
+      desc: '均衡远程 · 默认解锁',
+      hp: 100, dmg: 10, interval: 0.5, speed: 190, range: 300, bulletSpeed: 560
+    },
+    sword: {
+      name: '剑士', cls: 'sword', color: '#e67e22',
+      desc: '高血近战 · 环形斩击',
+      hp: 140, dmg: 20, interval: 0.75, speed: 210, range: 130, melee: true
+    },
+    mage: {
+      name: '法师', cls: 'mage', color: '#a55eea',
+      desc: '火球溅射 · 生存偏弱',
+      hp: 90, dmg: 16, interval: 0.9, speed: 185, range: 320, bulletSpeed: 340, splash: 70
+    },
+    priest: {
+      name: '牧师', cls: 'priest', color: '#f1c40f',
+      desc: '圣光速射 · 自带回血',
+      hp: 130, dmg: 8, interval: 0.4, speed: 180, range: 280, bulletSpeed: 620,
+      regenBase: 0.5, regenPerLv: 0.25
+    },
+    cannon: {
+      name: '炮手', cls: 'cannon', color: '#e74c3c',
+      desc: '重炮清屏 · 攻速缓慢',
+      hp: 115, dmg: 42, interval: 2.0, speed: 175, range: 360, bulletSpeed: 260, splash: 100
+    }
+  };
+  D.META = {
+    PROTO_ORDER: ['archer', 'sword', 'mage', 'priest', 'cannon'],
+    UNLOCK: { archer: 0, sword: 600, mage: 1500, priest: 2500, cannon: 3500 },
+    UPG_BASE: 100,        // 升1级费用：100 × 1.5^(lv-1)
+    UPG_GROWTH: 1.5,
+    MAX_LV: 10,
+    // 每级升级属性加成
+    BONUS: { hp: 0.08, dmg: 0.06, aspeed: 0.04, speed: 0.02 }
+  };
+
+  D.VERSION = 'v0.2.0';
   G.D = D;
 })();

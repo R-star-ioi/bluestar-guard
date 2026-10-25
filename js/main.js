@@ -20,6 +20,7 @@ var G = require('./boot.js');
 
     init: function () {
       G.Input.init();
+      G.Meta.load();
       Game.best = G.P.storage.get('lx_best', { wave: 0, kills: 0 });
       var snd = G.P.storage.get('lx_sound', 1);
       G.Audio.enabled = !!snd;
@@ -52,6 +53,7 @@ var G = require('./boot.js');
       Game.panelHero = null;
       Game.baseDead = false;
       Game.msg = null;
+      Game.metaEarned = 0;
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
       G.Waves.reset();
       G.Player.reset();
@@ -73,8 +75,18 @@ var G = require('./boot.js');
       Game.msg = { text: text, color: color || '#ffd166', t: life || 2, life: life || 2 };
     },
 
+    toast: function (text) {
+      Game.showMsg(text, '#7bed9f', 1.4);
+      G.Audio.play('button');
+    },
+
     // ============ 经济 ============
-    addGold: function (n) { Game.gold += n; },
+    addGold: function (n) {
+      Game.gold += n;
+      // 局内金币同步累积为局外「升级金币」（1:1）
+      Game.metaEarned = (Game.metaEarned || 0) + n;
+      G.Meta.earn(n);
+    },
     buffCost: function () { return Math.round(D.ECONOMY.BUFF_COST * Math.pow(D.ECONOMY.BUFF_GROWTH, Game.buffLevel)); },
     buyBuff: function () {
       var cost = Game.buffCost();
@@ -216,6 +228,7 @@ var G = require('./boot.js');
       // 波奖励
       Game.addGold(5 + w);
       G.FX.text(Game.base.x, Game.base.y - 70, '波次奖励 +' + (5 + w) + '💰', '#ffd700', 15);
+      G.Meta.save(); // 波次结束存档升级金币
     },
 
     gameOver: function () {
@@ -224,17 +237,18 @@ var G = require('./boot.js');
         Game.best = { wave: G.Waves.wave, kills: Game.kills };
         G.P.storage.set('lx_best', Game.best);
       }
+      G.Meta.save(); // 结算存档升级金币
       G.Audio.play('gameover');
       Game.setState('gameover');
     },
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
-      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'paused') return;
+      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'gameover' || Game.state === 'paused') return;
       // 去重：部分环境同一指针的 start 会双发，80ms 内忽略重复
       var now = Date.now();
       if (!Game._tapAt) Game._tapAt = {};
-      if (Game._tapAt[id] && now - Game._tapAt[id] < 80) return;
+      if (Game._tapAt[id] && now - Game._tapAt[id] < 150) return;
       Game._tapAt[id] = now;
       // 英雄面板打开时，点面板外关闭
       if (Game.panelHero) {
@@ -361,8 +375,8 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover') {
-        // 菜单/结算只画背景层
+      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes') {
+        // 菜单/英雄/结算只画背景层
         if (Game.state === 'gameover') {
           G.Bg.draw(ctx, ox, oy);
           G.Bg.drawBase(ctx, Game.base, ox, oy);

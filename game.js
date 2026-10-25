@@ -6,6 +6,7 @@ require('./js/core/input.js');
 require('./js/core/camera.js');
 require('./js/core/audio.js');
 require('./js/config/data.js');
+require('./js/core/meta.js');
 require('./js/core/bg.js');
 require('./js/entities/fx.js');
 require('./js/entities/pickup.js');
