@@ -50,7 +50,8 @@ var G = require('../boot.js');
         elite: false, boss: false,
         atkT: U.rand(0.3, 1.0), // 攻击计时
         shootT: 0,
-        vx: 0, vy: 0, wobT: Math.random() * 10
+        vx: 0, vy: 0, wobT: Math.random() * 10,
+        stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0
       };
       if (opts.elite) {
         e.elite = true;

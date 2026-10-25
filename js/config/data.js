@@ -198,6 +198,6 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.3.0';
+  D.VERSION = 'v0.3.1';
   G.D = D;
 })();

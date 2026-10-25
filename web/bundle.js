@@ -595,7 +595,7 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.3.0';
+  D.VERSION = 'v0.3.1';
   G.D = D;
 })();
 
@@ -1980,7 +1980,8 @@ var G = require('../boot.js');
         elite: false, boss: false,
         atkT: U.rand(0.3, 1.0), // 攻击计时
         shootT: 0,
-        vx: 0, vy: 0, wobT: Math.random() * 10
+        vx: 0, vy: 0, wobT: Math.random() * 10,
+        stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0
       };
       if (opts.elite) {
         e.elite = true;
