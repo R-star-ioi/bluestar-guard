@@ -1,0 +1,23 @@
+{
+  "compileType": "game",
+  "libVersion": "latest",
+  "appid": "touristappid",
+  "projectname": "lanxing-shouwei",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "minified": false,
+    "urlCheck": false,
+    "coverView": true,
+    "postcss": false,
+    "ignoreUploadUnusedFiles": true
+  },
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "docs" },
+      { "type": "folder", "value": "web" },
+      { "type": "file", "value": "index.html" },
+      { "type": "file", "value": "README.md" }
+    ]
+  }
+}
