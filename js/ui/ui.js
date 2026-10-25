@@ -91,7 +91,8 @@ var G = require('../boot.js');
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.textAlign = 'left';
-      ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime), 22, 48);
+      var wAtk = G.Player.stats && G.Player.stats.waveAtk ? Math.round(G.Player.stats.waveAtk * 100) : 0;
+      ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime) + '   ⚔ +' + wAtk + '%', 22, 48);
       ctx.fillText('👥 ' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT, 110, 48);
 
       // 波次（中）

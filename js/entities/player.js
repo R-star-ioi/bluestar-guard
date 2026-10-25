@@ -26,11 +26,11 @@ var G = require('../boot.js');
       Player.attackTimer = 0;
       Player.face = 1;
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
-      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0 };
+      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
     },
 
     // ---- 派生属性：主角基础 × 局内三选一加成 ----
-    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08); },
+    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk); },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed); },
     speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1); },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45); },

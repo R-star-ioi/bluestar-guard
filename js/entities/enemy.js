@@ -38,11 +38,13 @@ var G = require('../boot.js');
       var base = D.ENEMIES[type];
       var hpG = Math.pow(D.WAVE.HP_GROWTH, wave - 1);
       var dmgG = Math.min(D.WAVE.DMG_CAP, Math.pow(D.WAVE.DMG_GROWTH, wave - 1));
+      // 高波次产出成长：金币/经验随波次 +6%/波
+      var lootG = 1 + D.WAVE.GOLD_GROWTH * wave;
       var e = {
         type: type, x: x, y: y,
         hp: base.hp * hpG, maxHp: base.hp * hpG,
         speed: base.speed, dmg: base.dmg * dmgG,
-        r: base.radius, coin: base.coin, gem: base.gem,
+        r: base.radius, coin: Math.ceil(base.coin * lootG), gem: Math.ceil(base.gem * lootG),
         color: base.color, wave: wave,
         dead: false, hitT: 0,
         elite: false, boss: false,
@@ -54,7 +56,7 @@ var G = require('../boot.js');
         e.elite = true;
         e.hp *= D.ELITE.HP; e.maxHp = e.hp;
         e.speed *= D.ELITE.SPEED; e.r *= D.ELITE.RADIUS;
-        e.coin = D.ELITE.COIN; e.gem = D.ELITE.GEM;
+        e.coin = Math.ceil(D.ELITE.COIN * lootG); e.gem = Math.ceil(D.ELITE.GEM * lootG);
         e.dmg *= 1.5;
       }
       if (opts.boss) {
@@ -62,7 +64,7 @@ var G = require('../boot.js');
         e.hp = D.BOSS.HP * Math.pow(D.BOSS.HP_GROWTH, wave / D.WAVE.BOSS_EVERY - 1);
         e.maxHp = e.hp;
         e.speed = D.BOSS.SPEED; e.dmg = D.BOSS.DMG; e.r = D.BOSS.RADIUS;
-        e.coin = D.BOSS.COIN; e.gem = D.BOSS.GEM;
+        e.coin = Math.ceil(D.BOSS.COIN * lootG); e.gem = Math.ceil(D.BOSS.GEM * lootG);
         e.color = '#c0392b';
         e.summonT = D.BOSS.SUMMON_INTERVAL;
       }

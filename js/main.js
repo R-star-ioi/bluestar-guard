@@ -57,7 +57,7 @@ var G = require('./boot.js');
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
       G.Waves.reset();
       G.Player.reset();
-      G.Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0 };
+      G.Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
       Game.base = {
         x: D2.MAP_W / 2, y: D2.MAP_H / 2,
         hp: D2.BASE.HP, maxHp: D2.BASE.HP, r: D2.BASE.RADIUS
@@ -133,7 +133,7 @@ var G = require('./boot.js');
       while (Game.xp >= Game.xpNext) {
         Game.xp -= Game.xpNext;
         Game.level++;
-        Game.xpNext = Math.round(5 * Math.pow(1.35, Game.level - 1));
+        Game.xpNext = Math.round(5 * Math.pow(1.28, Game.level - 1));
         Game.openLevelUp();
       }
     },
@@ -224,7 +224,13 @@ var G = require('./boot.js');
     },
 
     onWaveClear: function (w) {
-      Game.showMsg('第 ' + w + ' 波 已肃清 ✓', '#7bed9f', 1.6);
+      // 波次清算：主角攻击成长（普通波 +4%，Boss 波 +12%）
+      var gain = D.WAVE.ATK_PER_WAVE + (w % D.WAVE.BOSS_EVERY === 0 ? D.WAVE.ATK_BOSS_BONUS : 0);
+      G.Player.stats.waveAtk += gain;
+      var pct = Math.round(G.Player.stats.waveAtk * 100);
+      Game.showMsg('第 ' + w + ' 波 已肃清 ✓  主角攻击 +' + Math.round(gain * 100) + '%', '#7bed9f', 1.6);
+      G.FX.text(G.Player.x, G.Player.y - 30, '攻击 +' + Math.round(gain * 100) + '%', '#ff9f43', 15);
+      G.FX.ring(G.Player.x, G.Player.y, '#ff9f43', 40, 0.4, 3);
       // 波奖励
       Game.addGold(5 + w);
       G.FX.text(Game.base.x, Game.base.y - 70, '波次奖励 +' + (5 + w) + '💰', '#ffd700', 15);

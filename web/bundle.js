@@ -441,7 +441,10 @@ var G = require('../boot.js');
     ELITE_CHANCE: 0.12,    // 精英概率
     BOSS_EVERY: 5,         // 每 5 波 Boss
     BUDGET_BASE: 10,       // 敌人预算：10 + 6波 + 波^1.5
-    MAX_ALIVE: 60          // 同屏敌人上限
+    MAX_ALIVE: 60,         // 同屏敌人上限
+    GOLD_GROWTH: 0.06,     // 敌人金币/经验产出每波 +6%（高波次产出提升）
+    ATK_PER_WAVE: 0.04,    // 每清一波 主角攻击 +4%（局内成长）
+    ATK_BOSS_BONUS: 0.08   // Boss 波清算额外 +8%（共 +12%）
   };
 
   // 精英 / Boss 倍率
@@ -506,14 +509,14 @@ var G = require('../boot.js');
 
   // 升级三选一技能池
   D.SKILLS = [
-    { id: 'atk', name: '攻击强化', icon: '🗡', max: 5, desc: lv => '主角伤害 +20%（当前 +' + (lv * 20) + '%）' },
-    { id: 'aspeed', name: '疾速射击', icon: '⚡', max: 5, desc: lv => '攻击间隔 -8%（当前 -' + (lv * 8) + '%）' },
-    { id: 'multi', name: '分裂箭矢', icon: '🔱', max: 3, desc: lv => '弹道 +' + lv + '（共 ' + (1 + lv) + ' 道）' },
+    { id: 'atk', name: '攻击强化', icon: '🗡', max: 8, desc: lv => '主角伤害 +20%（当前 +' + (lv * 20) + '%）' },
+    { id: 'aspeed', name: '疾速射击', icon: '⚡', max: 8, desc: lv => '攻击间隔 -8%（当前 -' + (lv * 8) + '%）' },
+    { id: 'multi', name: '分裂箭矢', icon: '🔱', max: 4, desc: lv => '弹道 +' + lv + '（共 ' + (1 + lv) + ' 道）' },
     { id: 'pierce', name: '穿透之刃', icon: '🎯', max: 3, desc: lv => '子弹可穿透 +' + lv + ' 个敌人' },
-    { id: 'crit', name: '致命打击', icon: '💥', max: 5, desc: lv => '暴击率 +' + (lv * 8) + '%（暴伤 ×2）' },
-    { id: 'bigshot', name: '巨型弹药', icon: '🔵', max: 3, desc: lv => '弹体 +30%，伤害 +' + (lv * 8) + '%' },
-    { id: 'hp', name: '生命之泉', icon: '❤', max: 5, desc: lv => '生命上限 +30 并回满该值' },
-    { id: 'regen', name: '恢复光环', icon: '💚', max: 5, desc: lv => '每秒回复 ' + lv + ' 生命' },
+    { id: 'crit', name: '致命打击', icon: '💥', max: 6, desc: lv => '暴击率 +' + (lv * 8) + '%（暴伤 ×2）' },
+    { id: 'bigshot', name: '巨型弹药', icon: '🔵', max: 4, desc: lv => '弹体 +30%，伤害 +' + (lv * 8) + '%' },
+    { id: 'hp', name: '生命之泉', icon: '❤', max: 8, desc: lv => '生命上限 +30 并回满该值' },
+    { id: 'regen', name: '恢复光环', icon: '💚', max: 8, desc: lv => '每秒回复 ' + lv + ' 生命' },
     { id: 'leech', name: '鲜血汲取', icon: '🩸', max: 3, desc: lv => '造成伤害的 ' + (lv * 2) + '% 转化为生命' },
     { id: 'speed', name: '疾风之靴', icon: '👟', max: 3, desc: lv => '移动速度 +' + (lv * 10) + '%' },
     { id: 'magnet', name: '磁力手套', icon: '🧲', max: 3, desc: lv => '拾取范围 +' + (lv * 45) + '%' },
@@ -572,7 +575,7 @@ var G = require('../boot.js');
     BONUS: { hp: 0.08, dmg: 0.06, aspeed: 0.04, speed: 0.02 }
   };
 
-  D.VERSION = 'v0.2.0';
+  D.VERSION = 'v0.2.1';
   G.D = D;
 })();
 
@@ -1220,11 +1223,11 @@ var G = require('../boot.js');
       Player.attackTimer = 0;
       Player.face = 1;
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
-      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0 };
+      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
     },
 
     // ---- 派生属性：主角基础 × 局内三选一加成 ----
-    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08); },
+    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk); },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed); },
     speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1); },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45); },
@@ -1445,11 +1448,13 @@ var G = require('../boot.js');
       var base = D.ENEMIES[type];
       var hpG = Math.pow(D.WAVE.HP_GROWTH, wave - 1);
       var dmgG = Math.min(D.WAVE.DMG_CAP, Math.pow(D.WAVE.DMG_GROWTH, wave - 1));
+      // 高波次产出成长：金币/经验随波次 +6%/波
+      var lootG = 1 + D.WAVE.GOLD_GROWTH * wave;
       var e = {
         type: type, x: x, y: y,
         hp: base.hp * hpG, maxHp: base.hp * hpG,
         speed: base.speed, dmg: base.dmg * dmgG,
-        r: base.radius, coin: base.coin, gem: base.gem,
+        r: base.radius, coin: Math.ceil(base.coin * lootG), gem: Math.ceil(base.gem * lootG),
         color: base.color, wave: wave,
         dead: false, hitT: 0,
         elite: false, boss: false,
@@ -1461,7 +1466,7 @@ var G = require('../boot.js');
         e.elite = true;
         e.hp *= D.ELITE.HP; e.maxHp = e.hp;
         e.speed *= D.ELITE.SPEED; e.r *= D.ELITE.RADIUS;
-        e.coin = D.ELITE.COIN; e.gem = D.ELITE.GEM;
+        e.coin = Math.ceil(D.ELITE.COIN * lootG); e.gem = Math.ceil(D.ELITE.GEM * lootG);
         e.dmg *= 1.5;
       }
       if (opts.boss) {
@@ -1469,7 +1474,7 @@ var G = require('../boot.js');
         e.hp = D.BOSS.HP * Math.pow(D.BOSS.HP_GROWTH, wave / D.WAVE.BOSS_EVERY - 1);
         e.maxHp = e.hp;
         e.speed = D.BOSS.SPEED; e.dmg = D.BOSS.DMG; e.r = D.BOSS.RADIUS;
-        e.coin = D.BOSS.COIN; e.gem = D.BOSS.GEM;
+        e.coin = Math.ceil(D.BOSS.COIN * lootG); e.gem = Math.ceil(D.BOSS.GEM * lootG);
         e.color = '#c0392b';
         e.summonT = D.BOSS.SUMMON_INTERVAL;
       }
@@ -2234,7 +2239,8 @@ var G = require('../boot.js');
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.textAlign = 'left';
-      ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime), 22, 48);
+      var wAtk = G.Player.stats && G.Player.stats.waveAtk ? Math.round(G.Player.stats.waveAtk * 100) : 0;
+      ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime) + '   ⚔ +' + wAtk + '%', 22, 48);
       ctx.fillText('👥 ' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT, 110, 48);
 
       // 波次（中）
@@ -2805,7 +2811,7 @@ var G = require('./boot.js');
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
       G.Waves.reset();
       G.Player.reset();
-      G.Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0 };
+      G.Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
       Game.base = {
         x: D2.MAP_W / 2, y: D2.MAP_H / 2,
         hp: D2.BASE.HP, maxHp: D2.BASE.HP, r: D2.BASE.RADIUS
@@ -2881,7 +2887,7 @@ var G = require('./boot.js');
       while (Game.xp >= Game.xpNext) {
         Game.xp -= Game.xpNext;
         Game.level++;
-        Game.xpNext = Math.round(5 * Math.pow(1.35, Game.level - 1));
+        Game.xpNext = Math.round(5 * Math.pow(1.28, Game.level - 1));
         Game.openLevelUp();
       }
     },
@@ -2972,7 +2978,13 @@ var G = require('./boot.js');
     },
 
     onWaveClear: function (w) {
-      Game.showMsg('第 ' + w + ' 波 已肃清 ✓', '#7bed9f', 1.6);
+      // 波次清算：主角攻击成长（普通波 +4%，Boss 波 +12%）
+      var gain = D.WAVE.ATK_PER_WAVE + (w % D.WAVE.BOSS_EVERY === 0 ? D.WAVE.ATK_BOSS_BONUS : 0);
+      G.Player.stats.waveAtk += gain;
+      var pct = Math.round(G.Player.stats.waveAtk * 100);
+      Game.showMsg('第 ' + w + ' 波 已肃清 ✓  主角攻击 +' + Math.round(gain * 100) + '%', '#7bed9f', 1.6);
+      G.FX.text(G.Player.x, G.Player.y - 30, '攻击 +' + Math.round(gain * 100) + '%', '#ff9f43', 15);
+      G.FX.ring(G.Player.x, G.Player.y, '#ff9f43', 40, 0.4, 3);
       // 波奖励
       Game.addGold(5 + w);
       G.FX.text(Game.base.x, Game.base.y - 70, '波次奖励 +' + (5 + w) + '💰', '#ffd700', 15);

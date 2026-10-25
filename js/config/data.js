@@ -44,7 +44,10 @@ var G = require('../boot.js');
     ELITE_CHANCE: 0.12,    // 精英概率
     BOSS_EVERY: 5,         // 每 5 波 Boss
     BUDGET_BASE: 10,       // 敌人预算：10 + 6波 + 波^1.5
-    MAX_ALIVE: 60          // 同屏敌人上限
+    MAX_ALIVE: 60,         // 同屏敌人上限
+    GOLD_GROWTH: 0.06,     // 敌人金币/经验产出每波 +6%（高波次产出提升）
+    ATK_PER_WAVE: 0.04,    // 每清一波 主角攻击 +4%（局内成长）
+    ATK_BOSS_BONUS: 0.08   // Boss 波清算额外 +8%（共 +12%）
   };
 
   // 精英 / Boss 倍率
@@ -109,14 +112,14 @@ var G = require('../boot.js');
 
   // 升级三选一技能池
   D.SKILLS = [
-    { id: 'atk', name: '攻击强化', icon: '🗡', max: 5, desc: lv => '主角伤害 +20%（当前 +' + (lv * 20) + '%）' },
-    { id: 'aspeed', name: '疾速射击', icon: '⚡', max: 5, desc: lv => '攻击间隔 -8%（当前 -' + (lv * 8) + '%）' },
-    { id: 'multi', name: '分裂箭矢', icon: '🔱', max: 3, desc: lv => '弹道 +' + lv + '（共 ' + (1 + lv) + ' 道）' },
+    { id: 'atk', name: '攻击强化', icon: '🗡', max: 8, desc: lv => '主角伤害 +20%（当前 +' + (lv * 20) + '%）' },
+    { id: 'aspeed', name: '疾速射击', icon: '⚡', max: 8, desc: lv => '攻击间隔 -8%（当前 -' + (lv * 8) + '%）' },
+    { id: 'multi', name: '分裂箭矢', icon: '🔱', max: 4, desc: lv => '弹道 +' + lv + '（共 ' + (1 + lv) + ' 道）' },
     { id: 'pierce', name: '穿透之刃', icon: '🎯', max: 3, desc: lv => '子弹可穿透 +' + lv + ' 个敌人' },
-    { id: 'crit', name: '致命打击', icon: '💥', max: 5, desc: lv => '暴击率 +' + (lv * 8) + '%（暴伤 ×2）' },
-    { id: 'bigshot', name: '巨型弹药', icon: '🔵', max: 3, desc: lv => '弹体 +30%，伤害 +' + (lv * 8) + '%' },
-    { id: 'hp', name: '生命之泉', icon: '❤', max: 5, desc: lv => '生命上限 +30 并回满该值' },
-    { id: 'regen', name: '恢复光环', icon: '💚', max: 5, desc: lv => '每秒回复 ' + lv + ' 生命' },
+    { id: 'crit', name: '致命打击', icon: '💥', max: 6, desc: lv => '暴击率 +' + (lv * 8) + '%（暴伤 ×2）' },
+    { id: 'bigshot', name: '巨型弹药', icon: '🔵', max: 4, desc: lv => '弹体 +30%，伤害 +' + (lv * 8) + '%' },
+    { id: 'hp', name: '生命之泉', icon: '❤', max: 8, desc: lv => '生命上限 +30 并回满该值' },
+    { id: 'regen', name: '恢复光环', icon: '💚', max: 8, desc: lv => '每秒回复 ' + lv + ' 生命' },
     { id: 'leech', name: '鲜血汲取', icon: '🩸', max: 3, desc: lv => '造成伤害的 ' + (lv * 2) + '% 转化为生命' },
     { id: 'speed', name: '疾风之靴', icon: '👟', max: 3, desc: lv => '移动速度 +' + (lv * 10) + '%' },
     { id: 'magnet', name: '磁力手套', icon: '🧲', max: 3, desc: lv => '拾取范围 +' + (lv * 45) + '%' },
@@ -175,6 +178,6 @@ var G = require('../boot.js');
     BONUS: { hp: 0.08, dmg: 0.06, aspeed: 0.04, speed: 0.02 }
   };
 
-  D.VERSION = 'v0.2.0';
+  D.VERSION = 'v0.2.1';
   G.D = D;
 })();
