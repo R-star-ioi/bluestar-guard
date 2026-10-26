@@ -6,13 +6,14 @@ var G = require('../boot.js');
     list: [],
     // type: coin | gem | heart | magnet | bomb
     spawn: function (type, x, y, value) {
-      if (Pickup.list.length > 150) Pickup.list.shift();
+      x = U.clamp(x, 15, D.MAP_W - 15);
+      y = U.clamp(y, 15, D.MAP_H - 15);
       var a = Math.random() * Math.PI * 2;
       var sp = U.rand(20, 70);
       Pickup.list.push({
         type: type, x: x, y: y, value: value || 1,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        t: 0, magnet: false, born: 0.15
+        t: 0, magnet: false, born: 0.05
       });
     },
     spawnLoot: function (x, y, coin, gem) {
@@ -44,23 +45,43 @@ var G = require('../boot.js');
       var pl = G.Player;
       var pr = pl.pickRange();
       var list = Pickup.list;
+
+      // 上限策略：不删除掉落物，先强制磁吸；极端爆量才自动入账（数值零丢失）
+      if (list.length > 240) {
+        var forced = 0;
+        for (var fi = 0; fi < list.length && forced < 60; fi++) {
+          if (!list[fi].magnet) { list[fi].magnet = true; forced++; }
+        }
+      }
+      while (list.length > 300) {
+        var old = list.shift();
+        if (old.type !== 'bomb') Pickup.collect(old, game); // 自动入账（炸弹直接丢弃，避免在玩家身边乱炸）
+      }
+
       for (var i = list.length - 1; i >= 0; i--) {
         var p = list[i];
         p.t += dt;
         if (p.born > 0) p.born -= dt;
-        // 磁吸
         var d2 = U.dist2(p.x, p.y, pl.x, pl.y);
         var rr = p.magnet ? 99999 : pr;
-        if (!pl.dead && p.born <= 0 && d2 < rr * rr) {
+        var pulling = !pl.dead && p.born <= 0 && (p.magnet || d2 < rr * rr);
+        if (pulling) {
+          // 磁吸：匀速直飞（约为旧有效速度的2倍）
           var d = Math.sqrt(d2) || 1;
-          var pull = p.magnet ? 620 : 340;
-          p.vx += (pl.x - p.x) / d * pull * dt;
-          p.vy += (pl.y - p.y) / d * pull * dt;
+          var fly = (p.magnet ? 1000 : 720) * dt;
+          if (fly >= d) {
+            p.x = pl.x; p.y = pl.y;
+          } else {
+            p.x += (pl.x - p.x) / d * fly;
+            p.y += (pl.y - p.y) / d * fly;
+          }
+          p.vx = 0; p.vy = 0;
+        } else {
+          p.vx *= Math.pow(0.004, dt); p.vy *= Math.pow(0.004, dt);
+          p.x += p.vx * dt; p.y += p.vy * dt;
         }
-        p.vx *= 0.92; p.vy *= 0.92;
-        p.x += p.vx * dt; p.y += p.vy * dt;
         // 拾取
-        if (!pl.dead && d2 < 24 * 24) {
+        if (!pl.dead && U.dist2(p.x, p.y, pl.x, pl.y) < 30 * 30) {
           Pickup.collect(p, game);
           list.splice(i, 1);
         }

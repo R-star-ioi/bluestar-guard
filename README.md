@@ -2,7 +2,7 @@
 
 割草生存 × 塔防布阵 × 英雄合成（玩法参考《永远的蔚蓝星球》）。纯 Canvas 2D 原生实现，零引擎、零美术素材、零第三方依赖。
 
-[![在线试玩](https://img.shields.io/badge/-%E5%9C%A8%E7%BA%BF%E8%AF%95%E7%8E%A9-blue?style=for-the-badge)](https://r-star-ioi.github.io/bluestar-guard/) [![版本](https://img.shields.io/badge/版本-v0.3.1-green)](https://github.com/R-star-ioi/bluestar-guard/releases)
+[![在线试玩](https://img.shields.io/badge/-%E5%9C%A8%E7%BA%BF%E8%AF%95%E7%8E%A9-blue?style=for-the-badge)](https://r-star-ioi.github.io/bluestar-guard/) [![版本](https://img.shields.io/badge/版本-v0.3.2-green)](https://github.com/R-star-ioi/bluestar-guard/releases)
 
 > 🎮 **点这里直接玩**：<https://r-star-ioi.github.io/bluestar-guard/>（电脑/手机浏览器均可，无需安装）
 
