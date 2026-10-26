@@ -606,7 +606,7 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.4.0';
+  D.VERSION = 'v0.4.1';
   G.D = D;
 })();
 
@@ -1036,8 +1036,9 @@ var G = require('../boot.js');
           p.vx *= Math.pow(0.004, dt); p.vy *= Math.pow(0.004, dt);
           p.x += p.vx * dt; p.y += p.vy * dt;
         }
-        // 拾取
-        if (!pl.dead && U.dist2(p.x, p.y, pl.x, pl.y) < 30 * 30) {
+        // 拾取（碰到主角身体边缘才算，避免消失在半空）
+        var pickR = pl.r + 3;
+        if (!pl.dead && U.dist2(p.x, p.y, pl.x, pl.y) < pickR * pickR) {
           Pickup.collect(p, game);
           list.splice(i, 1);
         }
