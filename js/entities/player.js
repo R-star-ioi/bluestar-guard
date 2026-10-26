@@ -33,6 +33,10 @@ var G = require('../boot.js');
     attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1); },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
     speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    // 主角面板 DPS（含暴击期望，不含多弹道），Boss/精英血量定价基准
+    dps: function () {
+      return Player.attack() * (1 + (Player.stats.crit || 0) * 0.08) / Player.interval();
+    },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
 
     update: function (dt, game) {

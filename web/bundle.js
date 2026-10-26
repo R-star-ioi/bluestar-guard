@@ -447,16 +447,21 @@ var G = require('../boot.js');
     ELITE_CHANCE: 0.10,    // 精英基础概率（随波次升至0.30封顶）
     BOSS_EVERY: 5,         // 每 5 波 Boss
     BUDGET_BASE: 12,       // 敌人预算：12 + 7波 + 波^1.55（数量温和上升，同屏上限60不变）
-    MAX_ALIVE: 60,         // 同屏敌人上限
+    MAX_ALIVE: 75,         // 同屏敌人上限
+    COUNT_MULT_TIERS: [    // 刷怪数量分阶段：前期少，10波起×3
+      { from: 1, mult: 1 },
+      { from: 5, mult: 1.5 },
+      { from: 10, mult: 3 }
+    ],
     GOLD_GROWTH: 0.06,     // 敌人金币/经验产出每波 +6%（高波次产出提升）
     ATK_PER_WAVE: 0.04,    // 每清一波 主角攻击 +4%（局内成长）
     ATK_BOSS_BONUS: 0.08   // Boss 波清算额外 +8%（共 +12%）
   };
 
   // 精英 / Boss 倍率
-  D.ELITE = { HP: 9, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 };
+  D.ELITE = { DPS_MULT: 7, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 }; // 血量=主角DPS×7
   D.BOSS = {
-    HP: 700, HP_GROWTH: 1.50, SPEED: 34, DMG: 25, RADIUS: 44,
+    DPS_MULT: 15, SPEED: 34, DMG: 25, RADIUS: 44, // 血量=主角DPS×15
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
@@ -601,7 +606,7 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.3.3';
+  D.VERSION = 'v0.4.0';
   G.D = D;
 })();
 
@@ -1279,6 +1284,10 @@ var G = require('../boot.js');
     attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1); },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
     speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    // 主角面板 DPS（含暴击期望，不含多弹道），Boss/精英血量定价基准
+    dps: function () {
+      return Player.attack() * (1 + (Player.stats.crit || 0) * 0.08) / Player.interval();
+    },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
 
     update: function (dt, game) {
@@ -2012,14 +2021,15 @@ var G = require('../boot.js');
       };
       if (opts.elite) {
         e.elite = true;
-        e.hp *= D.ELITE.HP; e.maxHp = e.hp;
+        e.hp = Math.max(60, G.Player.dps() * D.ELITE.DPS_MULT); // 精英=主角DPS×7
+        e.maxHp = e.hp;
         e.speed *= D.ELITE.SPEED; e.r *= D.ELITE.RADIUS;
         e.coin = Math.ceil(D.ELITE.COIN * lootG); e.gem = Math.ceil(D.ELITE.GEM * lootG);
         e.dmg *= 1.5;
       }
       if (opts.boss) {
         e.boss = true;
-        e.hp = D.BOSS.HP * Math.pow(D.BOSS.HP_GROWTH, wave / D.WAVE.BOSS_EVERY - 1);
+        e.hp = Math.max(300, G.Player.dps() * D.BOSS.DPS_MULT); // Boss=主角DPS×15
         e.maxHp = e.hp;
         e.speed = D.BOSS.SPEED; e.dmg = D.BOSS.DMG; e.r = D.BOSS.RADIUS;
         e.coin = Math.ceil(D.BOSS.COIN * lootG); e.gem = Math.ceil(D.BOSS.GEM * lootG);
@@ -2632,7 +2642,14 @@ var G = require('../boot.js');
       Waves.announced = false;
     },
 
-    budget: function (w) { return D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55); },
+    budget: function (w) {
+      var base = D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55);
+      var mult = 1;
+      for (var t = 0; t < D.WAVE.COUNT_MULT_TIERS.length; t++) {
+        if (w >= D.WAVE.COUNT_MULT_TIERS[t].from) mult = D.WAVE.COUNT_MULT_TIERS[t].mult;
+      }
+      return base * mult;
+    },
 
     // 血量阶梯成长：1-12波 ×1.13，13-24 ×1.20，25-39 ×1.30，40+ ×1.40
     hpGrowth: function (w) {
@@ -2676,7 +2693,7 @@ var G = require('../boot.js');
         if (Waves.spawnQueue > 0 && G.Enemy.list.length < D.WAVE.MAX_ALIVE) {
           Waves.spawnT -= dt;
           if (Waves.spawnT <= 0) {
-            Waves.spawnT = U.rand(0.35, 0.8);
+            Waves.spawnT = U.rand(0.3, 0.7);
             Waves.spawnOne(game, Waves.wave);
           }
         } else if (Waves.spawnQueue <= 0 && G.Enemy.list.length === 0) {
@@ -2707,7 +2724,7 @@ var G = require('../boot.js');
     spawnOne: function (game, w) {
       var cost = { slime: 2, fast: 3, tank: 6, shooter: 5 };
       var type = Waves.pickEnemyType(w);
-      var n = Math.max(1, Math.min(4, Math.floor(Waves.spawnQueue / cost[type] / 2)));
+      var n = Math.max(1, Math.min(6, Math.floor(Waves.spawnQueue / cost[type] / 2)));
       for (var i = 0; i < n && Waves.spawnQueue > 0; i++) {
         var p = Waves.spawnPoint(game);
         var opts = {};

@@ -18,7 +18,14 @@ var G = require('../boot.js');
       Waves.announced = false;
     },
 
-    budget: function (w) { return D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55); },
+    budget: function (w) {
+      var base = D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55);
+      var mult = 1;
+      for (var t = 0; t < D.WAVE.COUNT_MULT_TIERS.length; t++) {
+        if (w >= D.WAVE.COUNT_MULT_TIERS[t].from) mult = D.WAVE.COUNT_MULT_TIERS[t].mult;
+      }
+      return base * mult;
+    },
 
     // 血量阶梯成长：1-12波 ×1.13，13-24 ×1.20，25-39 ×1.30，40+ ×1.40
     hpGrowth: function (w) {
@@ -62,7 +69,7 @@ var G = require('../boot.js');
         if (Waves.spawnQueue > 0 && G.Enemy.list.length < D.WAVE.MAX_ALIVE) {
           Waves.spawnT -= dt;
           if (Waves.spawnT <= 0) {
-            Waves.spawnT = U.rand(0.35, 0.8);
+            Waves.spawnT = U.rand(0.3, 0.7);
             Waves.spawnOne(game, Waves.wave);
           }
         } else if (Waves.spawnQueue <= 0 && G.Enemy.list.length === 0) {
@@ -93,7 +100,7 @@ var G = require('../boot.js');
     spawnOne: function (game, w) {
       var cost = { slime: 2, fast: 3, tank: 6, shooter: 5 };
       var type = Waves.pickEnemyType(w);
-      var n = Math.max(1, Math.min(4, Math.floor(Waves.spawnQueue / cost[type] / 2)));
+      var n = Math.max(1, Math.min(6, Math.floor(Waves.spawnQueue / cost[type] / 2)));
       for (var i = 0; i < n && Waves.spawnQueue > 0; i++) {
         var p = Waves.spawnPoint(game);
         var opts = {};

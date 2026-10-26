@@ -50,16 +50,21 @@ var G = require('../boot.js');
     ELITE_CHANCE: 0.10,    // 精英基础概率（随波次升至0.30封顶）
     BOSS_EVERY: 5,         // 每 5 波 Boss
     BUDGET_BASE: 12,       // 敌人预算：12 + 7波 + 波^1.55（数量温和上升，同屏上限60不变）
-    MAX_ALIVE: 60,         // 同屏敌人上限
+    MAX_ALIVE: 75,         // 同屏敌人上限
+    COUNT_MULT_TIERS: [    // 刷怪数量分阶段：前期少，10波起×3
+      { from: 1, mult: 1 },
+      { from: 5, mult: 1.5 },
+      { from: 10, mult: 3 }
+    ],
     GOLD_GROWTH: 0.06,     // 敌人金币/经验产出每波 +6%（高波次产出提升）
     ATK_PER_WAVE: 0.04,    // 每清一波 主角攻击 +4%（局内成长）
     ATK_BOSS_BONUS: 0.08   // Boss 波清算额外 +8%（共 +12%）
   };
 
   // 精英 / Boss 倍率
-  D.ELITE = { HP: 9, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 };
+  D.ELITE = { DPS_MULT: 7, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 }; // 血量=主角DPS×7
   D.BOSS = {
-    HP: 700, HP_GROWTH: 1.50, SPEED: 34, DMG: 25, RADIUS: 44,
+    DPS_MULT: 15, SPEED: 34, DMG: 25, RADIUS: 44, // 血量=主角DPS×15
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
@@ -204,6 +209,6 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.3.3';
+  D.VERSION = 'v0.4.0';
   G.D = D;
 })();

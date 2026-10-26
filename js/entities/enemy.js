@@ -55,14 +55,15 @@ var G = require('../boot.js');
       };
       if (opts.elite) {
         e.elite = true;
-        e.hp *= D.ELITE.HP; e.maxHp = e.hp;
+        e.hp = Math.max(60, G.Player.dps() * D.ELITE.DPS_MULT); // 精英=主角DPS×7
+        e.maxHp = e.hp;
         e.speed *= D.ELITE.SPEED; e.r *= D.ELITE.RADIUS;
         e.coin = Math.ceil(D.ELITE.COIN * lootG); e.gem = Math.ceil(D.ELITE.GEM * lootG);
         e.dmg *= 1.5;
       }
       if (opts.boss) {
         e.boss = true;
-        e.hp = D.BOSS.HP * Math.pow(D.BOSS.HP_GROWTH, wave / D.WAVE.BOSS_EVERY - 1);
+        e.hp = Math.max(300, G.Player.dps() * D.BOSS.DPS_MULT); // Boss=主角DPS×15
         e.maxHp = e.hp;
         e.speed = D.BOSS.SPEED; e.dmg = D.BOSS.DMG; e.r = D.BOSS.RADIUS;
         e.coin = Math.ceil(D.BOSS.COIN * lootG); e.gem = Math.ceil(D.BOSS.GEM * lootG);
