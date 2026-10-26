@@ -8,6 +8,7 @@ var G = require('../boot.js');
     burns: [],            // 灼烧地带（星环Lv5）
     booms: [],            // 待引爆队列（崩解爆弹连锁）
     killCount: 0,         // 爆弹击杀计数
+    bombCd: 0,            // 爆弹触发冷却
     shield: { pool: 0, dur: 0, cd: 0 },          // 晶盾
     echo: { arr: [], spawnT: 0, trail: [] },     // 残影
     orbAng: 0,            // 星环角度
@@ -19,6 +20,7 @@ var G = require('../boot.js');
       Skills.burns.length = 0;
       Skills.booms.length = 0;
       Skills.killCount = 0;
+      Skills.bombCd = 0;
       Skills.shield = { pool: 0, dur: 0, cd: 0 };
       Skills.echo = { arr: [], spawnT: 0, trail: [] };
       Skills.orbAng = 0;
@@ -163,11 +165,13 @@ var G = require('../boot.js');
     // ---- 击杀 / 拾取钩子 ----
     onKill: function (e, game) {
       var lv = Skills.levelOf('bomb');
-      if (lv > 0) {
+      if (lv > 0 && Skills.bombCd <= 0) {
         Skills.killCount++;
         var need = [0, 12, 9, 7, 6, 4][lv];
         if (Skills.killCount >= need) {
           Skills.killCount = 0;
+      Skills.bombCd = 0;
+          Skills.bombCd = [0, 6, 8, 11, 15, 20][lv]; // 触发冷却，满级20秒
           Skills.booms.push({ x: e.x, y: e.y, delay: 0, depth: 0 });
         }
       }
@@ -191,6 +195,7 @@ var G = require('../boot.js');
 
       if (Skills.dmgBuffT > 0) Skills.dmgBuffT -= dt;
       if (Skills.aspdBuffT > 0) Skills.aspdBuffT -= dt;
+      if (Skills.bombCd > 0) Skills.bombCd -= dt;
 
       // 晶盾计时
       var sh = Skills.shield;

@@ -602,11 +602,11 @@ var G = require('../boot.js');
         '吸取范围+30%', '范围+60% 拾取经验短暂增伤', '范围+100% 拾取经验短暂加速',
         '击杀概率直接生成经验球', '引力漩涡：巨吸圈 圈内烧怪 拾取永久叠伤'][lv - 1] },
     bomb: { id: 'bomb', name: '崩解爆弹', max: 5, desc: lv => [
-        '每击杀12次 自动引爆小炸弹', '击杀9次触发 范围伤害提升', '爆炸可连锁引爆',
-        '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
+        '每击杀12次 自动引爆（冷却6秒）', '击杀9次触发 伤害提升（冷却8秒）', '爆炸可连锁（冷却11秒）',
+        '爆炸附带眩晕（冷却15秒）', '连环崩解：4杀引爆 无限连锁（冷却20秒）'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.4.1';
+  D.VERSION = 'v0.4.2';
   G.D = D;
 })();
 
@@ -1482,6 +1482,7 @@ var G = require('../boot.js');
     burns: [],            // 灼烧地带（星环Lv5）
     booms: [],            // 待引爆队列（崩解爆弹连锁）
     killCount: 0,         // 爆弹击杀计数
+    bombCd: 0,            // 爆弹触发冷却
     shield: { pool: 0, dur: 0, cd: 0 },          // 晶盾
     echo: { arr: [], spawnT: 0, trail: [] },     // 残影
     orbAng: 0,            // 星环角度
@@ -1493,6 +1494,7 @@ var G = require('../boot.js');
       Skills.burns.length = 0;
       Skills.booms.length = 0;
       Skills.killCount = 0;
+      Skills.bombCd = 0;
       Skills.shield = { pool: 0, dur: 0, cd: 0 };
       Skills.echo = { arr: [], spawnT: 0, trail: [] };
       Skills.orbAng = 0;
@@ -1637,11 +1639,13 @@ var G = require('../boot.js');
     // ---- 击杀 / 拾取钩子 ----
     onKill: function (e, game) {
       var lv = Skills.levelOf('bomb');
-      if (lv > 0) {
+      if (lv > 0 && Skills.bombCd <= 0) {
         Skills.killCount++;
         var need = [0, 12, 9, 7, 6, 4][lv];
         if (Skills.killCount >= need) {
           Skills.killCount = 0;
+      Skills.bombCd = 0;
+          Skills.bombCd = [0, 6, 8, 11, 15, 20][lv]; // 触发冷却，满级20秒
           Skills.booms.push({ x: e.x, y: e.y, delay: 0, depth: 0 });
         }
       }
@@ -1665,6 +1669,7 @@ var G = require('../boot.js');
 
       if (Skills.dmgBuffT > 0) Skills.dmgBuffT -= dt;
       if (Skills.aspdBuffT > 0) Skills.aspdBuffT -= dt;
+      if (Skills.bombCd > 0) Skills.bombCd -= dt;
 
       // 晶盾计时
       var sh = Skills.shield;
