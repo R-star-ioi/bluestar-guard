@@ -606,7 +606,19 @@ var G = require('../boot.js');
         '爆炸附带眩晕（冷却15秒）', '连环崩解：4杀引爆 无限连锁（冷却20秒）'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.4.2';
+  // ★ 更新公告（主菜单展示）
+  D.CHANGELOG = [
+    { ver: 'v0.4.2', title: '崩解爆弹冷却制', lines: ['满级连环崩解改为20秒冷却', '低等级冷却6~15秒，冷却期击杀不计数'] },
+    { ver: 'v0.4.1', title: '拾取贴身修复', lines: ['金币经验飞到身上才消失，不再半空蒸发'] },
+    { ver: 'v0.4.0', title: 'Boss/精英DPS定价', lines: ['Boss血量=主角DPS×15，精英=×7', '10波起小怪数量×3，同屏上限75'] },
+    { ver: 'v0.3.3', title: '血量阶梯成长', lines: ['13/25/40波起血量成长逐步加速，后期更有压迫感'] },
+    { ver: 'v0.3.2', title: '掉落修复+磁吸加速', lines: ['金币经验超量不再丢失', '磁吸速度约2倍，飞到身上才收'] },
+    { ver: 'v0.3.0', title: '附加技能系统', lines: ['星环/残影/晶盾/磁核/爆弹 5种被动', '最多持有3个，5级满级质变'] },
+    { ver: 'v0.2.x', title: '局外成长与节奏优化', lines: ['主页可选5主角并升级属性', '波次攻击成长+高波次产出提升'] },
+    { ver: 'v0.1.0', title: '首次发布', lines: ['割草 × 塔防 × 英雄合成'] }
+  ];
+
+  D.VERSION = 'v0.4.3';
   G.D = D;
 })();
 
@@ -3024,6 +3036,52 @@ var G = require('../boot.js');
       }
     },
 
+    // ================= 更新公告 =================
+    drawChangelog: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0a1030');
+      grad.addColorStop(1, '#1a1440');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      UI.button(ctx, 'cl_back', 12, 12, 88, 40, '‹ 返回', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState('menu');
+      });
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('更新公告', W / 2, 40);
+
+      var y = 72;
+      for (var i = 0; i < D.CHANGELOG.length; i++) {
+        var c = D.CHANGELOG[i];
+        if (y > H - 60) break;
+        // 版本行
+        ctx.textAlign = 'left';
+        UI.pill(ctx, 14, y, 64, 20, 'rgba(0,0,0,0.4)', 10);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText(c.ver, 20, y + 14);
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillStyle = '#8fd3ff';
+        ctx.fillText(c.title, 90, y + 14);
+        y += 26;
+        for (var li = 0; li < c.lines.length; li++) {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.72)';
+          ctx.fillText('· ' + c.lines[li], 24, y + 14);
+          y += 18;
+        }
+        y += 10;
+      }
+      ctx.textAlign = 'center';
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('完整更新日志见 GitHub Releases 页', W / 2, H - 24);
+    },
+
     // ================= 附加技能选择 =================
     SKILL_UI: {
       star: { color: '#8fd9ff', ch: '星' },
@@ -3171,6 +3229,12 @@ var G = require('../boot.js');
         ctx.fillRect(sx, sy, 1.6, 1.6);
       }
       ctx.globalAlpha = 1;
+
+      // 左上角公告入口
+      UI.button(ctx, 'changelog', 14, 14, 78, 34, '📢 公告', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState('changelog');
+      });
 
       ctx.textAlign = 'center';
       ctx.font = 'bold 44px sans-serif';
@@ -3424,6 +3488,7 @@ var G = require('../boot.js');
       switch (game.state) {
         case 'menu': UI.drawMenu(ctx, game); break;
         case 'heroes': UI.drawHeroes(ctx, game); break;
+        case 'changelog': UI.drawChangelog(ctx, game); break;
         case 'playing':
           UI.drawHud(ctx, game);
           if (game.panelHero) UI.drawHeroPanel(ctx, game);
@@ -3726,7 +3791,7 @@ var G = require('./boot.js');
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
-      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'gameover' || Game.state === 'paused') return;
+      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'gameover' || Game.state === 'paused') return;
       // 去重：部分环境同一指针的 start 会双发，80ms 内忽略重复
       var now = Date.now();
       if (!Game._tapAt) Game._tapAt = {};
@@ -3858,7 +3923,7 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes') {
+      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog') {
         // 菜单/英雄/结算只画背景层
         if (Game.state === 'gameover') {
           G.Bg.draw(ctx, ox, oy);

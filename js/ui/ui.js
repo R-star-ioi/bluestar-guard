@@ -269,6 +269,52 @@ var G = require('../boot.js');
       }
     },
 
+    // ================= 更新公告 =================
+    drawChangelog: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0a1030');
+      grad.addColorStop(1, '#1a1440');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      UI.button(ctx, 'cl_back', 12, 12, 88, 40, '‹ 返回', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState('menu');
+      });
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('更新公告', W / 2, 40);
+
+      var y = 72;
+      for (var i = 0; i < D.CHANGELOG.length; i++) {
+        var c = D.CHANGELOG[i];
+        if (y > H - 60) break;
+        // 版本行
+        ctx.textAlign = 'left';
+        UI.pill(ctx, 14, y, 64, 20, 'rgba(0,0,0,0.4)', 10);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText(c.ver, 20, y + 14);
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillStyle = '#8fd3ff';
+        ctx.fillText(c.title, 90, y + 14);
+        y += 26;
+        for (var li = 0; li < c.lines.length; li++) {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.72)';
+          ctx.fillText('· ' + c.lines[li], 24, y + 14);
+          y += 18;
+        }
+        y += 10;
+      }
+      ctx.textAlign = 'center';
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('完整更新日志见 GitHub Releases 页', W / 2, H - 24);
+    },
+
     // ================= 附加技能选择 =================
     SKILL_UI: {
       star: { color: '#8fd9ff', ch: '星' },
@@ -416,6 +462,12 @@ var G = require('../boot.js');
         ctx.fillRect(sx, sy, 1.6, 1.6);
       }
       ctx.globalAlpha = 1;
+
+      // 左上角公告入口
+      UI.button(ctx, 'changelog', 14, 14, 78, 34, '📢 公告', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState('changelog');
+      });
 
       ctx.textAlign = 'center';
       ctx.font = 'bold 44px sans-serif';
@@ -669,6 +721,7 @@ var G = require('../boot.js');
       switch (game.state) {
         case 'menu': UI.drawMenu(ctx, game); break;
         case 'heroes': UI.drawHeroes(ctx, game); break;
+        case 'changelog': UI.drawChangelog(ctx, game); break;
         case 'playing':
           UI.drawHud(ctx, game);
           if (game.panelHero) UI.drawHeroPanel(ctx, game);

@@ -281,7 +281,7 @@ var G = require('./boot.js');
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
-      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'gameover' || Game.state === 'paused') return;
+      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'gameover' || Game.state === 'paused') return;
       // 去重：部分环境同一指针的 start 会双发，80ms 内忽略重复
       var now = Date.now();
       if (!Game._tapAt) Game._tapAt = {};
@@ -413,7 +413,7 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes') {
+      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog') {
         // 菜单/英雄/结算只画背景层
         if (Game.state === 'gameover') {
           G.Bg.draw(ctx, ox, oy);
