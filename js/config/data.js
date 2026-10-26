@@ -37,13 +37,19 @@ var G = require('../boot.js');
   // 波次成长
   D.WAVE = {
     START_INTERVAL: 3,     // 波与波之间的间歇
-    HP_GROWTH: 1.13,       // 每波 HP ×1.13
+    HP_GROWTH: 1.13,       // 前期每波 HP ×1.13（13波起按阶梯加速，见 HP_GROWTH_TIERS）
+    HP_GROWTH_TIERS: [     // 血量阶梯式成长：对标玩家输出曲线，后期压迫感增强
+      { from: 1, rate: 1.13 },
+      { from: 13, rate: 1.20 },
+      { from: 25, rate: 1.30 },
+      { from: 40, rate: 1.40 }
+    ],
     DMG_GROWTH: 1.05,      // 每波伤害 ×1.05
     DMG_CAP: 3,            // 伤害成长上限倍数
     ELITE_FROM: 5,         // 精英出现起始波
-    ELITE_CHANCE: 0.12,    // 精英概率
+    ELITE_CHANCE: 0.10,    // 精英基础概率（随波次升至0.30封顶）
     BOSS_EVERY: 5,         // 每 5 波 Boss
-    BUDGET_BASE: 10,       // 敌人预算：10 + 6波 + 波^1.5
+    BUDGET_BASE: 12,       // 敌人预算：12 + 7波 + 波^1.55（数量温和上升，同屏上限60不变）
     MAX_ALIVE: 60,         // 同屏敌人上限
     GOLD_GROWTH: 0.06,     // 敌人金币/经验产出每波 +6%（高波次产出提升）
     ATK_PER_WAVE: 0.04,    // 每清一波 主角攻击 +4%（局内成长）
@@ -53,7 +59,7 @@ var G = require('../boot.js');
   // 精英 / Boss 倍率
   D.ELITE = { HP: 9, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 };
   D.BOSS = {
-    HP: 700, HP_GROWTH: 1.35, SPEED: 34, DMG: 25, RADIUS: 44,
+    HP: 700, HP_GROWTH: 1.50, SPEED: 34, DMG: 25, RADIUS: 44,
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
@@ -198,6 +204,6 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.3.2';
+  D.VERSION = 'v0.3.3';
   G.D = D;
 })();

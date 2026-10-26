@@ -68,7 +68,7 @@ var G = require('../boot.js');
         if (pulling) {
           // 磁吸：匀速直飞（约为旧有效速度的2倍）
           var d = Math.sqrt(d2) || 1;
-          var fly = (p.magnet ? 1000 : 720) * dt;
+          var fly = (p.magnet ? 360 : 260) * dt;
           if (fly >= d) {
             p.x = pl.x; p.y = pl.y;
           } else {

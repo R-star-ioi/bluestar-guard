@@ -36,7 +36,7 @@ var G = require('../boot.js');
     spawn: function (game, type, x, y, wave, opts) {
       opts = opts || {};
       var base = D.ENEMIES[type];
-      var hpG = Math.pow(D.WAVE.HP_GROWTH, wave - 1);
+      var hpG = G.Waves.hpGrowth(wave);
       var dmgG = Math.min(D.WAVE.DMG_CAP, Math.pow(D.WAVE.DMG_GROWTH, wave - 1));
       // 高波次产出成长：金币/经验随波次 +6%/波
       var lootG = 1 + D.WAVE.GOLD_GROWTH * wave;

@@ -434,13 +434,19 @@ var G = require('../boot.js');
   // 波次成长
   D.WAVE = {
     START_INTERVAL: 3,     // 波与波之间的间歇
-    HP_GROWTH: 1.13,       // 每波 HP ×1.13
+    HP_GROWTH: 1.13,       // 前期每波 HP ×1.13（13波起按阶梯加速，见 HP_GROWTH_TIERS）
+    HP_GROWTH_TIERS: [     // 血量阶梯式成长：对标玩家输出曲线，后期压迫感增强
+      { from: 1, rate: 1.13 },
+      { from: 13, rate: 1.20 },
+      { from: 25, rate: 1.30 },
+      { from: 40, rate: 1.40 }
+    ],
     DMG_GROWTH: 1.05,      // 每波伤害 ×1.05
     DMG_CAP: 3,            // 伤害成长上限倍数
     ELITE_FROM: 5,         // 精英出现起始波
-    ELITE_CHANCE: 0.12,    // 精英概率
+    ELITE_CHANCE: 0.10,    // 精英基础概率（随波次升至0.30封顶）
     BOSS_EVERY: 5,         // 每 5 波 Boss
-    BUDGET_BASE: 10,       // 敌人预算：10 + 6波 + 波^1.5
+    BUDGET_BASE: 12,       // 敌人预算：12 + 7波 + 波^1.55（数量温和上升，同屏上限60不变）
     MAX_ALIVE: 60,         // 同屏敌人上限
     GOLD_GROWTH: 0.06,     // 敌人金币/经验产出每波 +6%（高波次产出提升）
     ATK_PER_WAVE: 0.04,    // 每清一波 主角攻击 +4%（局内成长）
@@ -450,7 +456,7 @@ var G = require('../boot.js');
   // 精英 / Boss 倍率
   D.ELITE = { HP: 9, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 };
   D.BOSS = {
-    HP: 700, HP_GROWTH: 1.35, SPEED: 34, DMG: 25, RADIUS: 44,
+    HP: 700, HP_GROWTH: 1.50, SPEED: 34, DMG: 25, RADIUS: 44,
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
@@ -595,7 +601,7 @@ var G = require('../boot.js');
         '爆炸附带眩晕', '连环崩解：4杀引爆 连锁无上限'][lv - 1] }
   };
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
-  D.VERSION = 'v0.3.2';
+  D.VERSION = 'v0.3.3';
   G.D = D;
 })();
 
@@ -1013,7 +1019,7 @@ var G = require('../boot.js');
         if (pulling) {
           // 磁吸：匀速直飞（约为旧有效速度的2倍）
           var d = Math.sqrt(d2) || 1;
-          var fly = (p.magnet ? 1000 : 720) * dt;
+          var fly = (p.magnet ? 360 : 260) * dt;
           if (fly >= d) {
             p.x = pl.x; p.y = pl.y;
           } else {
@@ -1987,7 +1993,7 @@ var G = require('../boot.js');
     spawn: function (game, type, x, y, wave, opts) {
       opts = opts || {};
       var base = D.ENEMIES[type];
-      var hpG = Math.pow(D.WAVE.HP_GROWTH, wave - 1);
+      var hpG = G.Waves.hpGrowth(wave);
       var dmgG = Math.min(D.WAVE.DMG_CAP, Math.pow(D.WAVE.DMG_GROWTH, wave - 1));
       // 高波次产出成长：金币/经验随波次 +6%/波
       var lootG = 1 + D.WAVE.GOLD_GROWTH * wave;
@@ -2626,7 +2632,21 @@ var G = require('../boot.js');
       Waves.announced = false;
     },
 
-    budget: function (w) { return D.WAVE.BUDGET_BASE + 6 * w + Math.pow(w, 1.5); },
+    budget: function (w) { return D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55); },
+
+    // 血量阶梯成长：1-12波 ×1.13，13-24 ×1.20，25-39 ×1.30，40+ ×1.40
+    hpGrowth: function (w) {
+      var tiers = D.WAVE.HP_GROWTH_TIERS;
+      var g = 1;
+      for (var v = 2; v <= w; v++) {
+        var rate = tiers[0].rate;
+        for (var t = 0; t < tiers.length; t++) {
+          if (v >= tiers[t].from) rate = tiers[t].rate;
+        }
+        g *= rate;
+      }
+      return g;
+    },
 
     // 刷怪点：屏幕外环带（以屏幕中心为参考）
     spawnPoint: function (game) {
@@ -2691,7 +2711,8 @@ var G = require('../boot.js');
       for (var i = 0; i < n && Waves.spawnQueue > 0; i++) {
         var p = Waves.spawnPoint(game);
         var opts = {};
-        if (w >= D.WAVE.ELITE_FROM && Math.random() < D.WAVE.ELITE_CHANCE) opts.elite = true;
+        var eliteChance = Math.min(0.30, D.WAVE.ELITE_CHANCE + w * 0.006);
+        if (w >= D.WAVE.ELITE_FROM && Math.random() < eliteChance) opts.elite = true;
         G.Enemy.spawn(game, type, p.x, p.y, w, opts);
         Waves.spawnQueue -= cost[type];
       }

@@ -18,7 +18,21 @@ var G = require('../boot.js');
       Waves.announced = false;
     },
 
-    budget: function (w) { return D.WAVE.BUDGET_BASE + 6 * w + Math.pow(w, 1.5); },
+    budget: function (w) { return D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55); },
+
+    // 血量阶梯成长：1-12波 ×1.13，13-24 ×1.20，25-39 ×1.30，40+ ×1.40
+    hpGrowth: function (w) {
+      var tiers = D.WAVE.HP_GROWTH_TIERS;
+      var g = 1;
+      for (var v = 2; v <= w; v++) {
+        var rate = tiers[0].rate;
+        for (var t = 0; t < tiers.length; t++) {
+          if (v >= tiers[t].from) rate = tiers[t].rate;
+        }
+        g *= rate;
+      }
+      return g;
+    },
 
     // 刷怪点：屏幕外环带（以屏幕中心为参考）
     spawnPoint: function (game) {
@@ -83,7 +97,8 @@ var G = require('../boot.js');
       for (var i = 0; i < n && Waves.spawnQueue > 0; i++) {
         var p = Waves.spawnPoint(game);
         var opts = {};
-        if (w >= D.WAVE.ELITE_FROM && Math.random() < D.WAVE.ELITE_CHANCE) opts.elite = true;
+        var eliteChance = Math.min(0.30, D.WAVE.ELITE_CHANCE + w * 0.006);
+        if (w >= D.WAVE.ELITE_FROM && Math.random() < eliteChance) opts.elite = true;
         G.Enemy.spawn(game, type, p.x, p.y, w, opts);
         Waves.spawnQueue -= cost[type];
       }
