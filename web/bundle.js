@@ -608,6 +608,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.2', title: '主菜单排版修复', lines: ['标题区独立排版，水晶徽记不再被选关卡片遮挡', '徽记改为矢量绘制，不依赖 emoji', '矮屏下按钮与说明文字自动收紧，不再重叠'] },
     { ver: 'v0.5.1', title: '宝箱与资源展示优化', lines: ['通关宝箱改为回主界面领取 领取后显示已打开状态', '钻石与金币移至右上角资源栏', '1-50关均可预览 未通关前关则开始按钮锁定'] },
     { ver: 'v0.5.0', title: '关卡系统上线', lines: ['50个关卡，每关20波，通关开宝箱', '主界面左右箭头选关，逐关解锁', '新增钻石：满血通关300钻/≥70%150钻/保底50钻'] },
     { ver: 'v0.4.2', title: '崩解爆弹冷却制', lines: ['满级连环崩解改为20秒冷却', '低等级冷却6~15秒，冷却期击杀不计数'] },
@@ -635,7 +636,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.1';
+  D.VERSION = 'v0.5.2';
   G.D = D;
 })();
 
@@ -3317,21 +3318,23 @@ var G = require('../boot.js');
       ctx.fillStyle = '#ffd166';
       ctx.fillText(String(G.Meta.gold), rrx + 120, rry + 18);
 
+      // ---- 标题区（logo 锁版）：标题 → 副标题 → 水晶徽记，自成一块，
+      //      下方关卡卡片按这一块的高度定位，不再压住徽记 ----
+      var ty = Math.max(92, H * 0.163);
       ctx.textAlign = 'center';
       ctx.font = 'bold 44px sans-serif';
       ctx.fillStyle = '#8fd3ff';
-      ctx.fillText('蓝星守卫', W / 2, H * 0.18);
+      ctx.fillText('蓝星守卫', W / 2, ty);
       ctx.font = '13px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText('割草 × 塔防 × 英雄合成', W / 2, H * 0.18 + 32);
-      // 水晶装饰
-      ctx.font = '36px sans-serif';
-      ctx.fillText('💎', W / 2, H * 0.28 + Math.sin(t * 2) * 6);
+      ctx.fillText('割草 × 塔防 × 英雄合成', W / 2, ty + 28);
+      // 水晶徽记（矢量绘制，避免 emoji 缺字）
+      UI.drawCrest(ctx, W / 2, ty + 51 + Math.sin(t * 1.6) * 1.5, W < 420 ? 9 : 11, t);
 
       // ---- 关卡选择 ----
       var lv = G.Meta.selectedLevel;
       var lvName = D.LEVELS.nameOf(lv);
-      var y0 = H * 0.235;
+      var y0 = ty + 75;
       UI.button(ctx, 'lv_prev', W / 2 - 178, y0, 52, 56, '◀', null, 'rgba(90,100,140,1)', function () {
         if (G.Meta.selectedLevel > 1) { G.Meta.selectedLevel--; G.Meta.save(); G.Audio.play('button'); }
         else G.Audio.play('error');
@@ -3402,11 +3405,16 @@ var G = require('../boot.js');
       }
 
       // 开始挑战（未解锁前一关则不可点击）
-      UI.button(ctx, 'start', W / 2 - 100, H * 0.425, 200, 56, locked ? '🔒 未解锁' : '▶ 开始挑战', locked ? '先通关第 ' + G.Meta.maxLevel + ' 关' : ('第 ' + lv + ' 关 · ' + lvName), '#2d6cdf', function () {
+      // 按钮位置跟随上方内容下沿，避免矮屏上宝箱与按钮重叠
+      var startY = Math.max(H * 0.425, by0 + 90);
+      // 矮屏压缩下半段行距，保证说明文字不会顶到底部版本号
+      var gs = Math.min(1, (H - 46 - startY) / 271);
+      if (gs < 0.7) gs = 0.7;
+      UI.button(ctx, 'start', W / 2 - 100, startY, 200, 56, locked ? '🔒 未解锁' : '▶ 开始挑战', locked ? '先通关第 ' + G.Meta.maxLevel + ' 关' : ('第 ' + lv + ' 关 · ' + lvName), '#2d6cdf', function () {
         game.startRun(G.Meta.selectedLevel);
       }, locked);
       // 英雄按钮（局外成长）
-      UI.button(ctx, 'heroes', W / 2 - 100, H * 0.425 + 66, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
+      UI.button(ctx, 'heroes', W / 2 - 100, startY + 66 * gs, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
         G.Audio.play('button');
         game.setState('heroes');
       });
@@ -3414,11 +3422,11 @@ var G = require('../boot.js');
       var sel = G.Meta.protoStats(G.Meta.selected);
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#ffd166';
-      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, H * 0.425 + 148);
+      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, startY + 148 * gs);
       var best = game.best;
       ctx.font = '12px sans-serif';
       ctx.fillStyle = 'rgba(255,215,0,0.85)';
-      ctx.fillText('👑 最佳纪录：第 ' + (best.lv || 1) + ' 关 · 第 ' + (best.wv || 0) + ' 波', W / 2, H * 0.425 + 192);
+      ctx.fillText('👑 最佳纪录：第 ' + (best.lv || 1) + ' 关 · 第 ' + (best.wv || 0) + ' 波', W / 2, startY + 192 * gs);
 
       // 玩法说明
       ctx.font = '11px sans-serif';
@@ -3430,7 +3438,7 @@ var G = require('../boot.js');
         '捡到的金币可在「英雄」页升级主角属性'
       ];
       for (var li = 0; li < lines.length; li++) {
-        ctx.fillText(lines[li], W / 2, H * 0.425 + 220 + li * 17);
+        ctx.fillText(lines[li], W / 2, startY + (220 + li * 17) * gs);
       }
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
@@ -3601,6 +3609,44 @@ var G = require('../boot.js');
         ctx.fillStyle = 'rgba(10,14,30,0.5)';
         ctx.fillRect(x, y, w, h);
       }
+    },
+
+    // 主菜单 logo 徽记：光晕 + 水晶 + 两侧渐隐纹线（主菜单标题区专用）
+    drawCrest: function (ctx, cx, cy, r, t) {
+      // 光晕
+      var halo = ctx.createRadialGradient(cx, cy, 1, cx, cy, r * 3.4);
+      halo.addColorStop(0, 'rgba(126,249,255,0.28)');
+      halo.addColorStop(0.5, 'rgba(90,160,255,0.10)');
+      halo.addColorStop(1, 'rgba(90,160,255,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 3.4, 0, Math.PI * 2);
+      ctx.fill();
+      // 两侧渐隐纹线
+      var lw = r * 6;
+      for (var s = -1; s <= 1; s += 2) {
+        var lx = cx + s * (r * 1.7);
+        var lg = ctx.createLinearGradient(lx, 0, lx + s * lw, 0);
+        lg.addColorStop(0, 'rgba(143,211,255,0.55)');
+        lg.addColorStop(1, 'rgba(143,211,255,0)');
+        ctx.strokeStyle = lg;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(lx, cy);
+        ctx.lineTo(lx + s * lw, cy);
+        ctx.stroke();
+      }
+      // 水晶本体（呼吸光晕）
+      ctx.save();
+      ctx.shadowColor = 'rgba(126,249,255,0.85)';
+      ctx.shadowBlur = 10 + 4 * Math.sin(t * 2);
+      UI.drawDiamond(ctx, cx, cy, r, '#a9e8ff');
+      ctx.restore();
+      // 侧翼小晶体
+      ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t * 2 + 1);
+      UI.drawDiamond(ctx, cx - r * 2.6, cy, r * 0.36, '#7ecbff');
+      UI.drawDiamond(ctx, cx + r * 2.6, cy, r * 0.36, '#7ecbff');
+      ctx.globalAlpha = 1;
     },
 
     // 资源图标（矢量）
