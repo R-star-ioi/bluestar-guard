@@ -211,6 +211,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.1', title: '宝箱与资源展示优化', lines: ['通关宝箱改为回主界面领取 领取后显示已打开状态', '钻石与金币移至右上角资源栏', '1-50关均可预览 未通关前关则开始按钮锁定'] },
     { ver: 'v0.5.0', title: '关卡系统上线', lines: ['50个关卡，每关20波，通关开宝箱', '主界面左右箭头选关，逐关解锁', '新增钻石：满血通关300钻/≥70%150钻/保底50钻'] },
     { ver: 'v0.4.2', title: '崩解爆弹冷却制', lines: ['满级连环崩解改为20秒冷却', '低等级冷却6~15秒，冷却期击杀不计数'] },
     { ver: 'v0.4.1', title: '拾取贴身修复', lines: ['金币经验飞到身上才消失，不再半空蒸发'] },
@@ -237,6 +238,6 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.0';
+  D.VERSION = 'v0.5.1';
   G.D = D;
 })();

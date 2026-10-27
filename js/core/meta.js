@@ -10,6 +10,7 @@ var G = require('../boot.js');
     diamonds: 0,                      // 钻石（通关宝箱奖励）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
+    chests: { level: 0, boxes: [false, false, false], claimed: [false, false, false] }, // 主界面领取的宝箱
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -20,7 +21,8 @@ var G = require('../boot.js');
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
         Meta.diamonds = m.diamonds || 0;
         Meta.maxLevel = m.maxLevel || 1;
-        Meta.selectedLevel = Math.min(m.selectedLevel || 1, Meta.maxLevel);
+        Meta.selectedLevel = m.selectedLevel || 1;
+        if (m.chests) Meta.chests = m.chests;
       }
     },
     save: function () {
@@ -28,13 +30,29 @@ var G = require('../boot.js');
         gold: Meta.gold, unlocked: Meta.unlocked,
         levels: Meta.levels, selected: Meta.selected,
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
-        selectedLevel: Meta.selectedLevel
+        selectedLevel: Meta.selectedLevel, chests: Meta.chests
       });
     },
 
     addDiamonds: function (n) {
       Meta.diamonds += n;
       Meta.save();
+    },
+
+    // 通关后把宝箱放回主界面待领
+    setChests: function (level, boxes) {
+      Meta.chests = { level: level, boxes: boxes, claimed: [false, false, false] };
+      Meta.save();
+    },
+    // 在主界面领取宝箱，返回获得的钻石（0=不可领）
+    claimChest: function (i) {
+      var c = Meta.chests;
+      if (!c || !c.boxes[i] || c.claimed[i]) return 0;
+      c.claimed[i] = true;
+      var amt = D.LEVELS.BOX_REWARDS[i];
+      Meta.diamonds += amt;
+      Meta.save();
+      return amt;
     },
     // 通关后解锁下一关
     unlockLevel: function (lv) {

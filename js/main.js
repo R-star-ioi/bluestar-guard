@@ -53,6 +53,12 @@ var G = require('./boot.js');
     startRun: function (level) {
       var D2 = D;
       level = level || G.Meta.selectedLevel || 1;
+      // 关卡锁：必须先通关上一关
+      if (level > G.Meta.maxLevel) {
+        Game.showMsg('请先通关第 ' + G.Meta.maxLevel + ' 关', '#ff6b6b', 1.6);
+        G.Audio.play('error');
+        return;
+      }
       Game.currentLevel = level;
       G.Meta.selectedLevel = level;
       G.Meta.save();
@@ -275,30 +281,26 @@ var G = require('./boot.js');
       G.Meta.save(); // 波次结束存档升级金币
     },
 
-    // 通关：第20波清空
+    // 通关：第20波清空（宝箱放回主界面领取）
     onLevelClear: function () {
       var pct = Game.base.hp / Game.base.maxHp;
-      Game.victory = {
-        pct: pct,
-        boxes: [true, pct >= 0.7, pct >= 0.999],   // 保底1箱 / ≥70% / 满血
-        claimed: [false, false, false]
-      };
-      G.Meta.unlockLevel(Game.currentLevel + 1);
+      var boxes = [true, pct >= 0.7, pct >= 0.999];   // 保底1箱 / ≥70% / 满血
+      Game.victory = { pct: pct, boxes: boxes, claimed: [false, false, false] };
+      G.Meta.setChests(Game.currentLevel, boxes);   // 主界面领取
+      G.Meta.unlockLevel(Game.currentLevel + 1);    // 通关即可解锁下一关（不论血量）
       G.Meta.save();
       G.Audio.play('levelup');
       G.Camera.shake(5, 0.4);
       Game.setState('victory');
     },
 
-    claimBox: function (i) {
-      var v = Game.victory;
-      if (!v || v.claimed[i] || !v.boxes[i]) { G.Audio.play('error'); return; }
-      v.claimed[i] = true;
-      var amt = D.LEVELS.BOX_REWARDS[i];
-      G.Meta.addDiamonds(amt);
+    // 主界面领取宝箱
+    claimChest: function (i) {
+      var amt = G.Meta.claimChest(i);
+      if (!amt) { G.Audio.play('error'); return; }
       G.Audio.play('coin');
-      G.FX.text(Game.base.x, Game.base.y - 60, '+' + amt + ' 钻石', '#7ef9ff', 16);
-      G.FX.ring(Game.base.x, Game.base.y, '#7ef9ff', 60, 0.5, 4);
+      Game.showMsg('+' + amt + ' 钻石', '#7ef9ff', 1.2);
+      G.FX.text(G.Player.x, G.Player.y - 30, '+' + amt + ' 钻石', '#7ef9ff', 15);
     },
 
     nextLevel: function () {
