@@ -7,6 +7,9 @@ var G = require('../boot.js');
     unlocked: { archer: true },
     levels: { archer: 1 },
     selected: 'archer',
+    diamonds: 0,                      // 钻石（通关宝箱奖励）
+    maxLevel: 1,                      // 最高已解锁关卡
+    selectedLevel: 1,                 // 当前选中关卡
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -15,13 +18,30 @@ var G = require('../boot.js');
         Meta.unlocked = m.unlocked || { archer: true };
         Meta.levels = m.levels || { archer: 1 };
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
+        Meta.diamonds = m.diamonds || 0;
+        Meta.maxLevel = m.maxLevel || 1;
+        Meta.selectedLevel = Math.min(m.selectedLevel || 1, Meta.maxLevel);
       }
     },
     save: function () {
       G.P.storage.set('lx_meta', {
         gold: Meta.gold, unlocked: Meta.unlocked,
-        levels: Meta.levels, selected: Meta.selected
+        levels: Meta.levels, selected: Meta.selected,
+        diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
+        selectedLevel: Meta.selectedLevel
       });
+    },
+
+    addDiamonds: function (n) {
+      Meta.diamonds += n;
+      Meta.save();
+    },
+    // 通关后解锁下一关
+    unlockLevel: function (lv) {
+      if (lv > Meta.maxLevel) {
+        Meta.maxLevel = Math.min(lv, D.LEVELS.TOTAL);
+        Meta.save();
+      }
     },
 
     // 对局金币 → 升级金币（1:1 即时累积）

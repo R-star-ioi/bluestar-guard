@@ -95,16 +95,16 @@ var G = require('../boot.js');
       ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime) + '   ⚔ +' + wAtk + '%', 22, 48);
       ctx.fillText('👥 ' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT, 110, 48);
 
-      // 波次（中）
+      // 关卡与波次（中）
       ctx.textAlign = 'center';
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#ffd166';
-      var wtxt = '第 ' + Math.max(1, G.Waves.wave) + ' 波';
-      ctx.fillText(wtxt, W / 2, 30);
-      if (G.Waves.state === 'rest' && G.Waves.wave > 0) {
+      ctx.fillText('第 ' + game.currentLevel + ' 关 · ' + Math.max(1, G.Waves.wave) + '/' + D.LEVELS.WAVES + ' 波', W / 2, 30);
+      var lbl = G.Waves.label();
+      if (lbl) {
         ctx.font = '10px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.fillText('下一波 ' + Math.ceil(G.Waves.timer) + 's', W / 2, 47);
+        ctx.fillStyle = lbl.boss ? '#ff6b6b' : 'rgba(255,255,255,0.7)';
+        ctx.fillText(lbl.boss ? '⚠ BOSS 波即将来袭' : lbl.txt, W / 2, 47);
       }
 
       // 金币（右侧）
@@ -480,11 +480,56 @@ var G = require('../boot.js');
       ctx.font = '36px sans-serif';
       ctx.fillText('💎', W / 2, H * 0.28 + Math.sin(t * 2) * 6);
 
-      UI.button(ctx, 'start', W / 2 - 100, H * 0.38, 200, 56, '▶ 开始游戏', null, '#2d6cdf', function () {
-        game.startRun();
+      // ---- 关卡选择 ----
+      var lv = G.Meta.selectedLevel;
+      var lvName = D.LEVELS.nameOf(lv);
+      var y0 = H * 0.235;
+      UI.button(ctx, 'lv_prev', W / 2 - 178, y0, 52, 56, '◀', null, 'rgba(90,100,140,1)', function () {
+        if (G.Meta.selectedLevel > 1) { G.Meta.selectedLevel--; G.Meta.save(); G.Audio.play('button'); }
+        else G.Audio.play('error');
+      }, G.Meta.selectedLevel <= 1);
+      UI.pill(ctx, W / 2 - 118, y0, 236, 56, 'rgba(12,20,48,0.9)', 14);
+      ctx.strokeStyle = 'rgba(130,170,255,0.5)';
+      ctx.lineWidth = 2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(W / 2 - 116.5, y0 + 1.5, 233, 53, 13); ctx.stroke(); }
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#8fd3ff';
+      ctx.fillText('第 ' + lv + ' 关', W / 2, y0 + 24);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText('· ' + lvName + ' ·', W / 2, y0 + 44);
+      UI.button(ctx, 'lv_next', W / 2 + 126, y0, 52, 56, '▶', null, 'rgba(90,100,140,1)', function () {
+        if (G.Meta.selectedLevel < G.Meta.maxLevel) { G.Meta.selectedLevel++; G.Meta.save(); G.Audio.play('button'); }
+        else G.Audio.play('error');
+      }, G.Meta.selectedLevel >= G.Meta.maxLevel);
+      // 解锁进度
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('已解锁 ' + G.Meta.maxLevel + '/' + D.LEVELS.TOTAL + ' 关（通关解锁下一关）', W / 2, y0 + 70);
+
+      // 宝箱预览
+      var bx0 = W / 2 - 110, by0 = y0 + 80;
+      var boxCols = ['#cd9a3c', '#8fa8d9', '#b56ce0'];
+      var boxReqs = ['保底', '≥70%血量', '满血通关'];
+      for (var bi = 0; bi < 3; bi++) {
+        var bcx = bx0 + bi * 76 + 30;
+        UI.drawChest(ctx, bcx - 16, by0, 32, 26, boxCols[bi]);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#7ef9ff';
+        ctx.fillText(D.LEVELS.BOX_REWARDS[bi] + '钻', bcx, by0 + 38);
+        ctx.font = '9px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillText(boxReqs[bi], bcx, by0 + 50);
+      }
+
+      // 开始挑战
+      UI.button(ctx, 'start', W / 2 - 100, H * 0.425, 200, 56, '▶ 开始挑战', '第 ' + lv + ' 关 · ' + lvName, '#2d6cdf', function () {
+        game.startRun(G.Meta.selectedLevel);
       });
       // 英雄按钮（局外成长）
-      UI.button(ctx, 'heroes', W / 2 - 100, H * 0.38 + 66, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
+      UI.button(ctx, 'heroes', W / 2 - 100, H * 0.425 + 66, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
         G.Audio.play('button');
         game.setState('heroes');
       });
@@ -492,11 +537,12 @@ var G = require('../boot.js');
       var sel = G.Meta.protoStats(G.Meta.selected);
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#ffd166';
-      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, H * 0.38 + 146);
+      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, H * 0.425 + 148);
+      ctx.fillText('💎 钻石 ' + G.Meta.diamonds, W / 2, H * 0.425 + 168);
       var best = game.best;
       ctx.font = '12px sans-serif';
       ctx.fillStyle = 'rgba(255,215,0,0.85)';
-      ctx.fillText('👑 最佳纪录：第 ' + best.wave + ' 波 · 击杀 ' + best.kills, W / 2, H * 0.38 + 170);
+      ctx.fillText('👑 最佳纪录：第 ' + (best.lv || 1) + ' 关 · 第 ' + (best.wv || 0) + ' 波', W / 2, H * 0.425 + 192);
 
       // 玩法说明
       ctx.font = '11px sans-serif';
@@ -504,11 +550,11 @@ var G = require('../boot.js');
       var lines = [
         '拖动屏幕移动，自动攻击',
         '金币招募英雄守卫水晶 · 同名同级英雄拖拽合成',
-        '升级三选一随机技能 · 每5波BOSS来袭',
+        '升级三选一随机技能 · 第10/20波BOSS守关',
         '捡到的金币可在「英雄」页升级主角属性'
       ];
       for (var li = 0; li < lines.length; li++) {
-        ctx.fillText(lines[li], W / 2, H * 0.38 + 200 + li * 18);
+        ctx.fillText(lines[li], W / 2, H * 0.425 + 220 + li * 17);
       }
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
@@ -637,6 +683,125 @@ var G = require('../boot.js');
       }
     },
 
+    // 宝箱矢量绘制（左上角x,y，宽w高h）
+    drawChest: function (ctx, x, y, w, h, color, state) {
+      // 箱体
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y + h * 0.35, w, h * 0.65);
+      // 箱盖
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x, y, w, h * 0.35);
+      // 描边
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y + h * 0.35, w, h * 0.65);
+      ctx.beginPath();
+      ctx.moveTo(x, y + h * 0.35); ctx.lineTo(x + w, y + h * 0.35);
+      ctx.stroke();
+      // 锁扣
+      ctx.fillStyle = '#ffe082';
+      ctx.fillRect(x + w / 2 - 3, y + h * 0.3, 6, 8);
+      if (state === 'claimed') {
+        ctx.fillStyle = 'rgba(10,14,30,0.55)';
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = '#7bed9f';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('✓', x + w / 2, y + h / 2 + 6);
+      }
+    },
+
+    // ================= 通关结算 =================
+    drawVictory: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var v = game.victory;
+      if (!v) return;
+      ctx.fillStyle = 'rgba(6,10,28,0.88)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText('🏆 第 ' + game.currentLevel + ' 关 通关！', W / 2, H * 0.11);
+
+      // 基地血量条
+      var bw = Math.min(280, W - 80), bx = (W - bw) / 2, by = H * 0.16;
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText('基地剩余血量 ' + Math.ceil(v.pct * 100) + '%', W / 2, by - 8);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); }
+      else ctx.fillRect(bx, by, bw, 14);
+      var hpCol = v.pct >= 0.999 ? '#ffd700' : (v.pct >= 0.7 ? '#2ecc71' : (v.pct >= 0.3 ? '#e67e22' : '#e74c3c'));
+      ctx.fillStyle = hpCol;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * Math.max(0, v.pct), 12, 6); ctx.fill(); }
+      else ctx.fillRect(bx + 1, by + 1, (bw - 2) * Math.max(0, v.pct), 12);
+
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('通关宝箱', W / 2, by + 48);
+
+      // 三档宝箱
+      var boxCols = ['#cd9a3c', '#8fa8d9', '#b56ce0'];
+      var boxReqs = ['任意通关', '血量≥70%', '满血通关'];
+      var cw = 92, chh = 104, gap = 10;
+      var total = cw * 3 + gap * 2;
+      var x0 = (W - total) / 2, y0 = by + 60;
+      for (var i = 0; i < 3; i++) {
+        var cx0 = x0 + i * (cw + gap);
+        var got = v.boxes[i];
+        var claimed = v.claimed[i];
+        var cy0 = y0;
+        ctx.fillStyle = got ? 'rgba(30,44,96,0.97)' : 'rgba(18,24,48,0.9)';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(cx0, cy0, cw, chh, 13); ctx.fill(); }
+        else ctx.fillRect(cx0, cy0, cw, chh);
+        ctx.strokeStyle = got ? (claimed ? 'rgba(123,237,159,0.8)' : 'rgba(255,209,102,0.85)') : 'rgba(120,130,160,0.35)';
+        ctx.lineWidth = 2;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(cx0, cy0, cw, chh, 13); ctx.stroke(); }
+        var bob = got && !claimed ? Math.sin(Date.now() / 250 + i * 2) * 2 : 0;
+        ctx.globalAlpha = got ? 1 : 0.4;
+        UI.drawChest(ctx, cx0 + (cw - 40) / 2, cy0 + 8 + bob, 40, 34, boxCols[i], claimed ? 'claimed' : null);
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillStyle = got ? '#7ef9ff' : 'rgba(255,255,255,0.5)';
+        ctx.fillText(D.LEVELS.BOX_REWARDS[i] + ' 钻石', cx0 + cw / 2, cy0 + 58);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText(boxReqs[i], cx0 + cw / 2, cy0 + 72);
+        if (got && !claimed) {
+          UI.button(ctx, 'box_' + i, cx0 + 14, cy0 + chh - 22, cw - 28, 18, '领取', null, '#27ae60', (function (idx) {
+            return function () { game.claimBox(idx); };
+          })(i));
+        } else if (claimed) {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = '#7bed9f';
+          ctx.fillText('已领取', cx0 + cw / 2, cy0 + chh - 11);
+        } else {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx.fillText('未达成', cx0 + cw / 2, cy0 + chh - 11);
+        }
+      }
+
+      // 钻石余额
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText('💎 钻石 ' + G.Meta.diamonds, W / 2, y0 + 3 * 104 + 2 * 10 + 26);
+
+      // 按钮
+      var by0 = y0 + 3 * 104 + 2 * 10 + 42;
+      var hasNext = game.currentLevel < D.LEVELS.TOTAL;
+      UI.button(ctx, 'v_next', W / 2 - 110, by0, 220, 52, hasNext ? '▶ 下一关（第 ' + (game.currentLevel + 1) + ' 关）' : '已是最终关', null, '#2d6cdf', function () {
+        game.nextLevel();
+      }, !hasNext);
+      UI.button(ctx, 'v_retry', W / 2 - 110, by0 + 64, 220, 46, '↻ 重打本关', null, 'rgba(90,100,140,1)', function () {
+        game.startRun(game.currentLevel);
+      });
+      UI.button(ctx, 'v_home', W / 2 - 110, by0 + 122, 220, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
+        game.setState('menu');
+      });
+    },
+
     // ================= 结算 =================
     drawGameOver: function (ctx, game) {
       var W = G.P.screenW, H = G.P.screenH;
@@ -653,7 +818,7 @@ var G = require('../boot.js');
       else ctx.fillRect(px, py, pw, 225);
 
       var rows = [
-        ['坚守波次', '第 ' + G.Waves.wave + ' 波'],
+        ['关卡进度', '第 ' + game.currentLevel + ' 关 · ' + G.Waves.wave + '/' + D.LEVELS.WAVES + ' 波'],
         ['击杀敌人', String(game.kills)],
         ['存活时间', U.fmtTime(game.playTime)],
         ['英雄等级', String(game.level)],
@@ -733,6 +898,7 @@ var G = require('../boot.js');
           break;
         case 'paused': UI.drawHud(ctx, game); UI.drawPaused(ctx, game); break;
         case 'gameover': UI.drawGameOver(ctx, game); break;
+        case 'victory': UI.drawVictory(ctx, game); break;
       }
     }
   };

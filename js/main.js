@@ -20,11 +20,14 @@ var G = require('./boot.js');
     pendingLevels: 0,
     levelUpPhase: 'stat',
     skillPickOptions: [],
+    currentLevel: 1,
+    victory: null,
 
     init: function () {
       G.Input.init();
       G.Meta.load();
-      Game.best = G.P.storage.get('lx_best', { wave: 0, kills: 0 });
+      Game.best = G.P.storage.get('lx_best', { lv: 1, wv: 0 });
+      if (Game.best.wave !== undefined) { Game.best = { lv: 1, wv: 0 }; }
       var snd = G.P.storage.get('lx_sound', 1);
       G.Audio.enabled = !!snd;
       Game.setState('menu');
@@ -47,8 +50,12 @@ var G = require('./boot.js');
     },
 
     // ============ 开局 ============
-    startRun: function () {
+    startRun: function (level) {
       var D2 = D;
+      level = level || G.Meta.selectedLevel || 1;
+      Game.currentLevel = level;
+      G.Meta.selectedLevel = level;
+      G.Meta.save();
       Game.gold = D2.ECONOMY.START_GOLD;
       Game.level = 1; Game.xp = 0; Game.xpNext = 5;
       Game.kills = 0; Game.playTime = 0;
@@ -58,9 +65,10 @@ var G = require('./boot.js');
       Game.msg = null;
       Game.metaEarned = 0;
       Game.pendingLevels = 0;
+      Game.victory = null;
       G.Skills.reset();
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
-      G.Waves.reset();
+      G.Waves.reset(level);
       G.Player.reset();
       G.Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
       Game.base = {
@@ -248,9 +256,8 @@ var G = require('./boot.js');
       }
     },
 
-    onWaveStart: function (w) {
-      var boss = w % D.WAVE.BOSS_EVERY === 0;
-      Game.showMsg(boss ? '⚠ 第 ' + w + ' 波 · BOSS 来袭' : '第 ' + w + ' 波来袭', boss ? '#ff6b6b' : '#ffd166', 2);
+    onWaveStart: function (level, w, boss) {
+      Game.showMsg(boss ? '⚠ 第 ' + w + '/' + D.LEVELS.WAVES + ' 波 · BOSS 来袭' : '第 ' + w + '/' + D.LEVELS.WAVES + ' 波来袭', boss ? '#ff6b6b' : '#ffd166', 2);
       if (boss) G.Camera.shake(5, 0.4);
     },
 
@@ -268,10 +275,41 @@ var G = require('./boot.js');
       G.Meta.save(); // 波次结束存档升级金币
     },
 
+    // 通关：第20波清空
+    onLevelClear: function () {
+      var pct = Game.base.hp / Game.base.maxHp;
+      Game.victory = {
+        pct: pct,
+        boxes: [true, pct >= 0.7, pct >= 0.999],   // 保底1箱 / ≥70% / 满血
+        claimed: [false, false, false]
+      };
+      G.Meta.unlockLevel(Game.currentLevel + 1);
+      G.Meta.save();
+      G.Audio.play('levelup');
+      G.Camera.shake(5, 0.4);
+      Game.setState('victory');
+    },
+
+    claimBox: function (i) {
+      var v = Game.victory;
+      if (!v || v.claimed[i] || !v.boxes[i]) { G.Audio.play('error'); return; }
+      v.claimed[i] = true;
+      var amt = D.LEVELS.BOX_REWARDS[i];
+      G.Meta.addDiamonds(amt);
+      G.Audio.play('coin');
+      G.FX.text(Game.base.x, Game.base.y - 60, '+' + amt + ' 钻石', '#7ef9ff', 16);
+      G.FX.ring(Game.base.x, Game.base.y, '#7ef9ff', 60, 0.5, 4);
+    },
+
+    nextLevel: function () {
+      if (Game.currentLevel >= D.LEVELS.TOTAL) { Game.showMsg('已是最终关！', '#ffd166', 2); return; }
+      Game.startRun(Game.currentLevel + 1);
+    },
+
     gameOver: function () {
-      // 更新纪录
-      if (G.Waves.wave > Game.best.wave || (G.Waves.wave === Game.best.wave && Game.kills > Game.best.kills)) {
-        Game.best = { wave: G.Waves.wave, kills: Game.kills };
+      // 更新纪录（关卡进度）
+      if (Game.currentLevel > Game.best.lv || (Game.currentLevel === Game.best.lv && G.Waves.wave > (Game.best.wv || 0))) {
+        Game.best = { lv: Game.currentLevel, wv: G.Waves.wave };
         G.P.storage.set('lx_best', Game.best);
       }
       G.Meta.save(); // 结算存档升级金币
@@ -413,9 +451,9 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog') {
+      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'victory') {
         // 菜单/英雄/结算只画背景层
-        if (Game.state === 'gameover') {
+        if (Game.state === 'gameover' || Game.state === 'victory') {
           G.Bg.draw(ctx, ox, oy);
           G.Bg.drawBase(ctx, Game.base, ox, oy);
           G.Hero.draw(ctx, ox, oy);

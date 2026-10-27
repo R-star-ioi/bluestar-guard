@@ -33,19 +33,23 @@ var G = require('../boot.js');
     list: [],
     reset: function () { Enemy.list.length = 0; Grid.clear(); },
 
-    spawn: function (game, type, x, y, wave, opts) {
+    // 关卡制 spawn：opts = { level, wave, elite, boss }
+    spawn: function (game, type, x, y, opts) {
       opts = opts || {};
       var base = D.ENEMIES[type];
-      var hpG = G.Waves.hpGrowth(wave);
-      var dmgG = Math.min(D.WAVE.DMG_CAP, Math.pow(D.WAVE.DMG_GROWTH, wave - 1));
-      // 高波次产出成长：金币/经验随波次 +6%/波
-      var lootG = 1 + D.WAVE.GOLD_GROWTH * wave;
+      var level = opts.level || 1;
+      var wave = opts.wave || 1;
+      var diff = G.Waves.diffBase(level);
+      var hpMult = G.Waves.hpMult(level, wave);
+      var dmgG = (1 + 0.10 * (level - 1)) * Math.pow(1.04, wave - 1);
+      // 产出随波次与关卡难度成长
+      var lootG = (1 + D.WAVE.GOLD_GROWTH * wave) * Math.pow(diff, 0.5);
       var e = {
         type: type, x: x, y: y,
-        hp: base.hp * hpG, maxHp: base.hp * hpG,
+        hp: base.hp * hpMult, maxHp: base.hp * hpMult,
         speed: base.speed, dmg: base.dmg * dmgG,
         r: base.radius, coin: Math.ceil(base.coin * lootG), gem: Math.ceil(base.gem * lootG),
-        color: base.color, wave: wave,
+        color: base.color, wave: wave, level: level, hpMult: hpMult,
         dead: false, hitT: 0,
         elite: false, boss: false,
         atkT: U.rand(0.3, 1.0), // 攻击计时
@@ -192,7 +196,7 @@ var G = require('../boot.js');
             e.summonT = D.BOSS.SUMMON_INTERVAL;
             for (var s = 0; s < D.BOSS.SUMMON_N; s++) {
               var a = Math.random() * Math.PI * 2;
-              var se = Enemy.spawn(game, 'slime', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60, e.wave);
+              var se = Enemy.spawn(game, 'slime', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60, { level: e.level, wave: e.wave, hpMult: e.hpMult });
               G.FX.ring(se.x, se.y, '#c0392b', 30, 0.3, 2);
             }
             G.FX.text(e.x, e.y - e.r - 14, '召唤!', '#ff9f43', 14);

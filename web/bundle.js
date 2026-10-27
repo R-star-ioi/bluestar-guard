@@ -608,6 +608,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.0', title: '关卡系统上线', lines: ['50个关卡，每关20波，通关开宝箱', '主界面左右箭头选关，逐关解锁', '新增钻石：满血通关300钻/≥70%150钻/保底50钻'] },
     { ver: 'v0.4.2', title: '崩解爆弹冷却制', lines: ['满级连环崩解改为20秒冷却', '低等级冷却6~15秒，冷却期击杀不计数'] },
     { ver: 'v0.4.1', title: '拾取贴身修复', lines: ['金币经验飞到身上才消失，不再半空蒸发'] },
     { ver: 'v0.4.0', title: 'Boss/精英DPS定价', lines: ['Boss血量=主角DPS×15，精英=×7', '10波起小怪数量×3，同屏上限75'] },
@@ -618,7 +619,22 @@ var G = require('../boot.js');
     { ver: 'v0.1.0', title: '首次发布', lines: ['割草 × 塔防 × 英雄合成'] }
   ];
 
-  D.VERSION = 'v0.4.3';
+  // ★ 关卡系统：50关 × 每关20波
+  D.LEVELS = {
+    TOTAL: 50,
+    WAVES: 20,             // 每关波次
+    HP_WAVE: 1.12,         // 波内血量：每波×1.12（第20波≈开局8.6倍）
+    BUDGET_WAVE: 1.13,     // 波内数量预算：每波×1.13
+    DIFF: 1.15,            // 关间难度基数（血量）：每关×1.15，50关≈1074倍
+    DIFF_BUDGET_POW: 0.6,  // 数量预算随关间难度的缩放指数（防爆屏）
+    BOSS_WAVES: [10, 20],  // 关内Boss波（20=关底Boss）
+    BOX_REWARDS: [50, 100, 150], // 三档宝箱钻石：30%档/70%档/满血档
+    NAMES: ['静谧草原', '荆棘丛林', '沉默森林', '风语荒漠', '霜冻苔原',
+            '幽暗洞穴', '熔岩裂谷', '浮空遗迹', '深渊裂隙', '星陨之巅'],
+    nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
+  };
+
+  D.VERSION = 'v0.5.0';
   G.D = D;
 })();
 
@@ -633,6 +649,9 @@ var G = require('../boot.js');
     unlocked: { archer: true },
     levels: { archer: 1 },
     selected: 'archer',
+    diamonds: 0,                      // 钻石（通关宝箱奖励）
+    maxLevel: 1,                      // 最高已解锁关卡
+    selectedLevel: 1,                 // 当前选中关卡
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -641,13 +660,30 @@ var G = require('../boot.js');
         Meta.unlocked = m.unlocked || { archer: true };
         Meta.levels = m.levels || { archer: 1 };
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
+        Meta.diamonds = m.diamonds || 0;
+        Meta.maxLevel = m.maxLevel || 1;
+        Meta.selectedLevel = Math.min(m.selectedLevel || 1, Meta.maxLevel);
       }
     },
     save: function () {
       G.P.storage.set('lx_meta', {
         gold: Meta.gold, unlocked: Meta.unlocked,
-        levels: Meta.levels, selected: Meta.selected
+        levels: Meta.levels, selected: Meta.selected,
+        diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
+        selectedLevel: Meta.selectedLevel
       });
+    },
+
+    addDiamonds: function (n) {
+      Meta.diamonds += n;
+      Meta.save();
+    },
+    // 通关后解锁下一关
+    unlockLevel: function (lv) {
+      if (lv > Meta.maxLevel) {
+        Meta.maxLevel = Math.min(lv, D.LEVELS.TOTAL);
+        Meta.save();
+      }
     },
 
     // 对局金币 → 升级金币（1:1 即时累积）
@@ -2017,19 +2053,23 @@ var G = require('../boot.js');
     list: [],
     reset: function () { Enemy.list.length = 0; Grid.clear(); },
 
-    spawn: function (game, type, x, y, wave, opts) {
+    // 关卡制 spawn：opts = { level, wave, elite, boss }
+    spawn: function (game, type, x, y, opts) {
       opts = opts || {};
       var base = D.ENEMIES[type];
-      var hpG = G.Waves.hpGrowth(wave);
-      var dmgG = Math.min(D.WAVE.DMG_CAP, Math.pow(D.WAVE.DMG_GROWTH, wave - 1));
-      // 高波次产出成长：金币/经验随波次 +6%/波
-      var lootG = 1 + D.WAVE.GOLD_GROWTH * wave;
+      var level = opts.level || 1;
+      var wave = opts.wave || 1;
+      var diff = G.Waves.diffBase(level);
+      var hpMult = G.Waves.hpMult(level, wave);
+      var dmgG = (1 + 0.10 * (level - 1)) * Math.pow(1.04, wave - 1);
+      // 产出随波次与关卡难度成长
+      var lootG = (1 + D.WAVE.GOLD_GROWTH * wave) * Math.pow(diff, 0.5);
       var e = {
         type: type, x: x, y: y,
-        hp: base.hp * hpG, maxHp: base.hp * hpG,
+        hp: base.hp * hpMult, maxHp: base.hp * hpMult,
         speed: base.speed, dmg: base.dmg * dmgG,
         r: base.radius, coin: Math.ceil(base.coin * lootG), gem: Math.ceil(base.gem * lootG),
-        color: base.color, wave: wave,
+        color: base.color, wave: wave, level: level, hpMult: hpMult,
         dead: false, hitT: 0,
         elite: false, boss: false,
         atkT: U.rand(0.3, 1.0), // 攻击计时
@@ -2176,7 +2216,7 @@ var G = require('../boot.js');
             e.summonT = D.BOSS.SUMMON_INTERVAL;
             for (var s = 0; s < D.BOSS.SUMMON_N; s++) {
               var a = Math.random() * Math.PI * 2;
-              var se = Enemy.spawn(game, 'slime', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60, e.wave);
+              var se = Enemy.spawn(game, 'slime', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60, { level: e.level, wave: e.wave, hpMult: e.hpMult });
               G.FX.ring(se.x, se.y, '#c0392b', 30, 0.3, 2);
             }
             G.FX.text(e.x, e.y - e.r - 14, '召唤!', '#ff9f43', 14);
@@ -2640,50 +2680,44 @@ var G = require('../boot.js');
 
 });
 __def("js/systems/waves.js", function (module, exports, require) {
-// 波次系统：预算刷怪 / 每5波Boss / 波间歇
+// 波次系统（关卡制）：每关20波，波内陡坡成长，通关检测
 var G = require('../boot.js');
 (function () {
   var U = G.U, D = G.D;
   var Waves = {
-    wave: 0,            // 当前波（0=未开始）
-    state: 'rest',      // rest(间歇) | active(进行中)
-    timer: 2.5,         // 状态剩余时间
-    spawnQueue: 0,      // 剩余预算
+    level: 1,           // 当前关卡
+    wave: 0,            // 关内波号 1..20
+    state: 'rest',      // rest | active
+    timer: 2.5,
+    spawnQueue: 0,
     spawnT: 0,
-    announced: false,
 
-    reset: function () {
+    reset: function (level) {
+      Waves.level = level || 1;
       Waves.wave = 0;
       Waves.state = 'rest';
       Waves.timer = 2.5;
       Waves.spawnQueue = 0;
-      Waves.announced = false;
+      Waves.spawnT = 0;
     },
 
-    budget: function (w) {
-      var base = D.WAVE.BUDGET_BASE + 7 * w + Math.pow(w, 1.55);
-      var mult = 1;
-      for (var t = 0; t < D.WAVE.COUNT_MULT_TIERS.length; t++) {
-        if (w >= D.WAVE.COUNT_MULT_TIERS[t].from) mult = D.WAVE.COUNT_MULT_TIERS[t].mult;
-      }
-      return base * mult;
+    totalWaves: function () { return D.LEVELS.WAVES; },
+
+    // 关间难度基数：1.15^(level-1)
+    diffBase: function (level) { return Math.pow(D.LEVELS.DIFF, level - 1); },
+
+    // 怪物血量总倍率 = 关间难度 × 波内陡坡
+    hpMult: function (level, wave) {
+      return Waves.diffBase(level) * Math.pow(D.LEVELS.HP_WAVE, wave - 1);
     },
 
-    // 血量阶梯成长：1-12波 ×1.13，13-24 ×1.20，25-39 ×1.30，40+ ×1.40
-    hpGrowth: function (w) {
-      var tiers = D.WAVE.HP_GROWTH_TIERS;
-      var g = 1;
-      for (var v = 2; v <= w; v++) {
-        var rate = tiers[0].rate;
-        for (var t = 0; t < tiers.length; t++) {
-          if (v >= tiers[t].from) rate = tiers[t].rate;
-        }
-        g *= rate;
-      }
-      return g;
+    // 数量预算 = 基础(随关卡) × 关间^0.6 × 波内陡坡
+    budget: function (level, wave) {
+      var base = 14 + 6 * level + Math.pow(level, 1.3);
+      return base * Math.pow(Waves.diffBase(level), D.LEVELS.DIFF_BUDGET_POW) * Math.pow(D.LEVELS.BUDGET_WAVE, wave - 1);
     },
 
-    // 刷怪点：屏幕外环带（以屏幕中心为参考）
+    // 刷怪点：屏幕外环带
     spawnPoint: function (game) {
       var cam = G.Camera;
       var cx = cam.x + G.P.screenW / 2, cy = cam.y + G.P.screenH / 2;
@@ -2694,31 +2728,36 @@ var G = require('../boot.js');
       return { x: x, y: y };
     },
 
-    pickEnemyType: function (w) {
+    pickEnemyType: function (lv) {
       var pool = ['slime'];
-      if (w >= 3) pool.push('fast', 'fast');
-      if (w >= 4) pool.push('tank');
-      if (w >= 6) pool.push('shooter', 'shooter');
+      if (lv >= 2) pool.push('fast', 'fast');
+      if (lv >= 3) pool.push('tank');
+      if (lv >= 4) pool.push('shooter', 'shooter');
       return U.choice(pool);
     },
+
+    isBossWave: function (w) { return D.LEVELS.BOSS_WAVES.indexOf(w) >= 0; },
 
     update: function (dt, game) {
       if (Waves.state === 'rest') {
         Waves.timer -= dt;
         if (Waves.timer <= 0) Waves.startNext(game);
       } else {
-        // 进行中：按预算持续刷怪
         if (Waves.spawnQueue > 0 && G.Enemy.list.length < D.WAVE.MAX_ALIVE) {
           Waves.spawnT -= dt;
           if (Waves.spawnT <= 0) {
             Waves.spawnT = U.rand(0.3, 0.7);
-            Waves.spawnOne(game, Waves.wave);
+            Waves.spawnOne(game);
           }
         } else if (Waves.spawnQueue <= 0 && G.Enemy.list.length === 0) {
-          // 波清空
-          Waves.state = 'rest';
-          Waves.timer = D.WAVE.START_INTERVAL;
-          game.onWaveClear(Waves.wave);
+          if (Waves.wave >= D.LEVELS.WAVES) {
+            // 本关全部波次清空 → 通关
+            game.onLevelClear();
+          } else {
+            Waves.state = 'rest';
+            Waves.timer = D.WAVE.START_INTERVAL;
+            game.onWaveClear(Waves.wave);
+          }
         }
       }
     },
@@ -2726,36 +2765,37 @@ var G = require('../boot.js');
     startNext: function (game) {
       Waves.wave++;
       Waves.state = 'active';
-      Waves.spawnQueue = Waves.budget(Waves.wave);
+      Waves.spawnQueue = Waves.budget(Waves.level, Waves.wave);
       Waves.spawnT = 0.5;
       G.Audio.play('wave');
-      game.onWaveStart(Waves.wave);
-      // Boss 波
-      if (Waves.wave % D.WAVE.BOSS_EVERY === 0) {
+      var boss = Waves.isBossWave(Waves.wave);
+      game.onWaveStart(Waves.level, Waves.wave, boss);
+      if (boss) {
         var p = Waves.spawnPoint(game);
-        G.Enemy.spawn(game, 'slime', p.x, p.y, Waves.wave, { boss: true });
+        G.Enemy.spawn(game, 'slime', p.x, p.y, { level: Waves.level, wave: Waves.wave, boss: true });
         G.Audio.play('boss');
         G.Camera.shake(6, 0.5);
       }
     },
 
-    spawnOne: function (game, w) {
+    spawnOne: function (game) {
       var cost = { slime: 2, fast: 3, tank: 6, shooter: 5 };
-      var type = Waves.pickEnemyType(w);
+      var type = Waves.pickEnemyType(Waves.level);
       var n = Math.max(1, Math.min(6, Math.floor(Waves.spawnQueue / cost[type] / 2)));
       for (var i = 0; i < n && Waves.spawnQueue > 0; i++) {
         var p = Waves.spawnPoint(game);
-        var opts = {};
-        var eliteChance = Math.min(0.30, D.WAVE.ELITE_CHANCE + w * 0.006);
-        if (w >= D.WAVE.ELITE_FROM && Math.random() < eliteChance) opts.elite = true;
-        G.Enemy.spawn(game, type, p.x, p.y, w, opts);
+        var opts = { level: Waves.level, wave: Waves.wave };
+        var eliteChance = Math.min(0.30, D.WAVE.ELITE_CHANCE + Waves.wave * 0.006 + Waves.level * 0.004);
+        if (Waves.wave >= D.WAVE.ELITE_FROM && Math.random() < eliteChance) opts.elite = true;
+        G.Enemy.spawn(game, type, p.x, p.y, opts);
         Waves.spawnQueue -= cost[type];
       }
     },
 
     label: function () {
-      if (Waves.state === 'rest' && Waves.wave > 0) {
-        return { txt: '第 ' + (Waves.wave + 1) + ' 波来袭 ' + Math.ceil(Waves.timer) + 's', boss: (Waves.wave + 1) % D.WAVE.BOSS_EVERY === 0 };
+      if (Waves.state === 'rest' && Waves.wave > 0 && Waves.wave < D.LEVELS.WAVES) {
+        var next = Waves.wave + 1;
+        return { txt: '第 ' + next + '/' + D.LEVELS.WAVES + ' 波 ' + Math.ceil(Waves.timer) + 's', boss: Waves.isBossWave(next) };
       }
       return null;
     }
@@ -2862,16 +2902,16 @@ var G = require('../boot.js');
       ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime) + '   ⚔ +' + wAtk + '%', 22, 48);
       ctx.fillText('👥 ' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT, 110, 48);
 
-      // 波次（中）
+      // 关卡与波次（中）
       ctx.textAlign = 'center';
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#ffd166';
-      var wtxt = '第 ' + Math.max(1, G.Waves.wave) + ' 波';
-      ctx.fillText(wtxt, W / 2, 30);
-      if (G.Waves.state === 'rest' && G.Waves.wave > 0) {
+      ctx.fillText('第 ' + game.currentLevel + ' 关 · ' + Math.max(1, G.Waves.wave) + '/' + D.LEVELS.WAVES + ' 波', W / 2, 30);
+      var lbl = G.Waves.label();
+      if (lbl) {
         ctx.font = '10px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.fillText('下一波 ' + Math.ceil(G.Waves.timer) + 's', W / 2, 47);
+        ctx.fillStyle = lbl.boss ? '#ff6b6b' : 'rgba(255,255,255,0.7)';
+        ctx.fillText(lbl.boss ? '⚠ BOSS 波即将来袭' : lbl.txt, W / 2, 47);
       }
 
       // 金币（右侧）
@@ -3247,11 +3287,56 @@ var G = require('../boot.js');
       ctx.font = '36px sans-serif';
       ctx.fillText('💎', W / 2, H * 0.28 + Math.sin(t * 2) * 6);
 
-      UI.button(ctx, 'start', W / 2 - 100, H * 0.38, 200, 56, '▶ 开始游戏', null, '#2d6cdf', function () {
-        game.startRun();
+      // ---- 关卡选择 ----
+      var lv = G.Meta.selectedLevel;
+      var lvName = D.LEVELS.nameOf(lv);
+      var y0 = H * 0.235;
+      UI.button(ctx, 'lv_prev', W / 2 - 178, y0, 52, 56, '◀', null, 'rgba(90,100,140,1)', function () {
+        if (G.Meta.selectedLevel > 1) { G.Meta.selectedLevel--; G.Meta.save(); G.Audio.play('button'); }
+        else G.Audio.play('error');
+      }, G.Meta.selectedLevel <= 1);
+      UI.pill(ctx, W / 2 - 118, y0, 236, 56, 'rgba(12,20,48,0.9)', 14);
+      ctx.strokeStyle = 'rgba(130,170,255,0.5)';
+      ctx.lineWidth = 2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(W / 2 - 116.5, y0 + 1.5, 233, 53, 13); ctx.stroke(); }
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#8fd3ff';
+      ctx.fillText('第 ' + lv + ' 关', W / 2, y0 + 24);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText('· ' + lvName + ' ·', W / 2, y0 + 44);
+      UI.button(ctx, 'lv_next', W / 2 + 126, y0, 52, 56, '▶', null, 'rgba(90,100,140,1)', function () {
+        if (G.Meta.selectedLevel < G.Meta.maxLevel) { G.Meta.selectedLevel++; G.Meta.save(); G.Audio.play('button'); }
+        else G.Audio.play('error');
+      }, G.Meta.selectedLevel >= G.Meta.maxLevel);
+      // 解锁进度
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('已解锁 ' + G.Meta.maxLevel + '/' + D.LEVELS.TOTAL + ' 关（通关解锁下一关）', W / 2, y0 + 70);
+
+      // 宝箱预览
+      var bx0 = W / 2 - 110, by0 = y0 + 80;
+      var boxCols = ['#cd9a3c', '#8fa8d9', '#b56ce0'];
+      var boxReqs = ['保底', '≥70%血量', '满血通关'];
+      for (var bi = 0; bi < 3; bi++) {
+        var bcx = bx0 + bi * 76 + 30;
+        UI.drawChest(ctx, bcx - 16, by0, 32, 26, boxCols[bi]);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#7ef9ff';
+        ctx.fillText(D.LEVELS.BOX_REWARDS[bi] + '钻', bcx, by0 + 38);
+        ctx.font = '9px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillText(boxReqs[bi], bcx, by0 + 50);
+      }
+
+      // 开始挑战
+      UI.button(ctx, 'start', W / 2 - 100, H * 0.425, 200, 56, '▶ 开始挑战', '第 ' + lv + ' 关 · ' + lvName, '#2d6cdf', function () {
+        game.startRun(G.Meta.selectedLevel);
       });
       // 英雄按钮（局外成长）
-      UI.button(ctx, 'heroes', W / 2 - 100, H * 0.38 + 66, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
+      UI.button(ctx, 'heroes', W / 2 - 100, H * 0.425 + 66, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
         G.Audio.play('button');
         game.setState('heroes');
       });
@@ -3259,11 +3344,12 @@ var G = require('../boot.js');
       var sel = G.Meta.protoStats(G.Meta.selected);
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#ffd166';
-      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, H * 0.38 + 146);
+      ctx.fillText('当前主角：' + sel.name + ' Lv' + sel.level + '　·　升级金币 ' + G.Meta.gold, W / 2, H * 0.425 + 148);
+      ctx.fillText('💎 钻石 ' + G.Meta.diamonds, W / 2, H * 0.425 + 168);
       var best = game.best;
       ctx.font = '12px sans-serif';
       ctx.fillStyle = 'rgba(255,215,0,0.85)';
-      ctx.fillText('👑 最佳纪录：第 ' + best.wave + ' 波 · 击杀 ' + best.kills, W / 2, H * 0.38 + 170);
+      ctx.fillText('👑 最佳纪录：第 ' + (best.lv || 1) + ' 关 · 第 ' + (best.wv || 0) + ' 波', W / 2, H * 0.425 + 192);
 
       // 玩法说明
       ctx.font = '11px sans-serif';
@@ -3271,11 +3357,11 @@ var G = require('../boot.js');
       var lines = [
         '拖动屏幕移动，自动攻击',
         '金币招募英雄守卫水晶 · 同名同级英雄拖拽合成',
-        '升级三选一随机技能 · 每5波BOSS来袭',
+        '升级三选一随机技能 · 第10/20波BOSS守关',
         '捡到的金币可在「英雄」页升级主角属性'
       ];
       for (var li = 0; li < lines.length; li++) {
-        ctx.fillText(lines[li], W / 2, H * 0.38 + 200 + li * 18);
+        ctx.fillText(lines[li], W / 2, H * 0.425 + 220 + li * 17);
       }
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
@@ -3404,6 +3490,125 @@ var G = require('../boot.js');
       }
     },
 
+    // 宝箱矢量绘制（左上角x,y，宽w高h）
+    drawChest: function (ctx, x, y, w, h, color, state) {
+      // 箱体
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y + h * 0.35, w, h * 0.65);
+      // 箱盖
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x, y, w, h * 0.35);
+      // 描边
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y + h * 0.35, w, h * 0.65);
+      ctx.beginPath();
+      ctx.moveTo(x, y + h * 0.35); ctx.lineTo(x + w, y + h * 0.35);
+      ctx.stroke();
+      // 锁扣
+      ctx.fillStyle = '#ffe082';
+      ctx.fillRect(x + w / 2 - 3, y + h * 0.3, 6, 8);
+      if (state === 'claimed') {
+        ctx.fillStyle = 'rgba(10,14,30,0.55)';
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = '#7bed9f';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('✓', x + w / 2, y + h / 2 + 6);
+      }
+    },
+
+    // ================= 通关结算 =================
+    drawVictory: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var v = game.victory;
+      if (!v) return;
+      ctx.fillStyle = 'rgba(6,10,28,0.88)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText('🏆 第 ' + game.currentLevel + ' 关 通关！', W / 2, H * 0.11);
+
+      // 基地血量条
+      var bw = Math.min(280, W - 80), bx = (W - bw) / 2, by = H * 0.16;
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText('基地剩余血量 ' + Math.ceil(v.pct * 100) + '%', W / 2, by - 8);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); }
+      else ctx.fillRect(bx, by, bw, 14);
+      var hpCol = v.pct >= 0.999 ? '#ffd700' : (v.pct >= 0.7 ? '#2ecc71' : (v.pct >= 0.3 ? '#e67e22' : '#e74c3c'));
+      ctx.fillStyle = hpCol;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * Math.max(0, v.pct), 12, 6); ctx.fill(); }
+      else ctx.fillRect(bx + 1, by + 1, (bw - 2) * Math.max(0, v.pct), 12);
+
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('通关宝箱', W / 2, by + 48);
+
+      // 三档宝箱
+      var boxCols = ['#cd9a3c', '#8fa8d9', '#b56ce0'];
+      var boxReqs = ['任意通关', '血量≥70%', '满血通关'];
+      var cw = 92, chh = 104, gap = 10;
+      var total = cw * 3 + gap * 2;
+      var x0 = (W - total) / 2, y0 = by + 60;
+      for (var i = 0; i < 3; i++) {
+        var cx0 = x0 + i * (cw + gap);
+        var got = v.boxes[i];
+        var claimed = v.claimed[i];
+        var cy0 = y0;
+        ctx.fillStyle = got ? 'rgba(30,44,96,0.97)' : 'rgba(18,24,48,0.9)';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(cx0, cy0, cw, chh, 13); ctx.fill(); }
+        else ctx.fillRect(cx0, cy0, cw, chh);
+        ctx.strokeStyle = got ? (claimed ? 'rgba(123,237,159,0.8)' : 'rgba(255,209,102,0.85)') : 'rgba(120,130,160,0.35)';
+        ctx.lineWidth = 2;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(cx0, cy0, cw, chh, 13); ctx.stroke(); }
+        var bob = got && !claimed ? Math.sin(Date.now() / 250 + i * 2) * 2 : 0;
+        ctx.globalAlpha = got ? 1 : 0.4;
+        UI.drawChest(ctx, cx0 + (cw - 40) / 2, cy0 + 8 + bob, 40, 34, boxCols[i], claimed ? 'claimed' : null);
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillStyle = got ? '#7ef9ff' : 'rgba(255,255,255,0.5)';
+        ctx.fillText(D.LEVELS.BOX_REWARDS[i] + ' 钻石', cx0 + cw / 2, cy0 + 58);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText(boxReqs[i], cx0 + cw / 2, cy0 + 72);
+        if (got && !claimed) {
+          UI.button(ctx, 'box_' + i, cx0 + 14, cy0 + chh - 22, cw - 28, 18, '领取', null, '#27ae60', (function (idx) {
+            return function () { game.claimBox(idx); };
+          })(i));
+        } else if (claimed) {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = '#7bed9f';
+          ctx.fillText('已领取', cx0 + cw / 2, cy0 + chh - 11);
+        } else {
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx.fillText('未达成', cx0 + cw / 2, cy0 + chh - 11);
+        }
+      }
+
+      // 钻石余额
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText('💎 钻石 ' + G.Meta.diamonds, W / 2, y0 + 3 * 104 + 2 * 10 + 26);
+
+      // 按钮
+      var by0 = y0 + 3 * 104 + 2 * 10 + 42;
+      var hasNext = game.currentLevel < D.LEVELS.TOTAL;
+      UI.button(ctx, 'v_next', W / 2 - 110, by0, 220, 52, hasNext ? '▶ 下一关（第 ' + (game.currentLevel + 1) + ' 关）' : '已是最终关', null, '#2d6cdf', function () {
+        game.nextLevel();
+      }, !hasNext);
+      UI.button(ctx, 'v_retry', W / 2 - 110, by0 + 64, 220, 46, '↻ 重打本关', null, 'rgba(90,100,140,1)', function () {
+        game.startRun(game.currentLevel);
+      });
+      UI.button(ctx, 'v_home', W / 2 - 110, by0 + 122, 220, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
+        game.setState('menu');
+      });
+    },
+
     // ================= 结算 =================
     drawGameOver: function (ctx, game) {
       var W = G.P.screenW, H = G.P.screenH;
@@ -3420,7 +3625,7 @@ var G = require('../boot.js');
       else ctx.fillRect(px, py, pw, 225);
 
       var rows = [
-        ['坚守波次', '第 ' + G.Waves.wave + ' 波'],
+        ['关卡进度', '第 ' + game.currentLevel + ' 关 · ' + G.Waves.wave + '/' + D.LEVELS.WAVES + ' 波'],
         ['击杀敌人', String(game.kills)],
         ['存活时间', U.fmtTime(game.playTime)],
         ['英雄等级', String(game.level)],
@@ -3500,6 +3705,7 @@ var G = require('../boot.js');
           break;
         case 'paused': UI.drawHud(ctx, game); UI.drawPaused(ctx, game); break;
         case 'gameover': UI.drawGameOver(ctx, game); break;
+        case 'victory': UI.drawVictory(ctx, game); break;
       }
     }
   };
@@ -3530,11 +3736,14 @@ var G = require('./boot.js');
     pendingLevels: 0,
     levelUpPhase: 'stat',
     skillPickOptions: [],
+    currentLevel: 1,
+    victory: null,
 
     init: function () {
       G.Input.init();
       G.Meta.load();
-      Game.best = G.P.storage.get('lx_best', { wave: 0, kills: 0 });
+      Game.best = G.P.storage.get('lx_best', { lv: 1, wv: 0 });
+      if (Game.best.wave !== undefined) { Game.best = { lv: 1, wv: 0 }; }
       var snd = G.P.storage.get('lx_sound', 1);
       G.Audio.enabled = !!snd;
       Game.setState('menu');
@@ -3557,8 +3766,12 @@ var G = require('./boot.js');
     },
 
     // ============ 开局 ============
-    startRun: function () {
+    startRun: function (level) {
       var D2 = D;
+      level = level || G.Meta.selectedLevel || 1;
+      Game.currentLevel = level;
+      G.Meta.selectedLevel = level;
+      G.Meta.save();
       Game.gold = D2.ECONOMY.START_GOLD;
       Game.level = 1; Game.xp = 0; Game.xpNext = 5;
       Game.kills = 0; Game.playTime = 0;
@@ -3568,9 +3781,10 @@ var G = require('./boot.js');
       Game.msg = null;
       Game.metaEarned = 0;
       Game.pendingLevels = 0;
+      Game.victory = null;
       G.Skills.reset();
       G.FX.clear(); G.Proj.clear(); G.Pickup.clear(); G.Enemy.reset(); G.Hero.reset();
-      G.Waves.reset();
+      G.Waves.reset(level);
       G.Player.reset();
       G.Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
       Game.base = {
@@ -3758,9 +3972,8 @@ var G = require('./boot.js');
       }
     },
 
-    onWaveStart: function (w) {
-      var boss = w % D.WAVE.BOSS_EVERY === 0;
-      Game.showMsg(boss ? '⚠ 第 ' + w + ' 波 · BOSS 来袭' : '第 ' + w + ' 波来袭', boss ? '#ff6b6b' : '#ffd166', 2);
+    onWaveStart: function (level, w, boss) {
+      Game.showMsg(boss ? '⚠ 第 ' + w + '/' + D.LEVELS.WAVES + ' 波 · BOSS 来袭' : '第 ' + w + '/' + D.LEVELS.WAVES + ' 波来袭', boss ? '#ff6b6b' : '#ffd166', 2);
       if (boss) G.Camera.shake(5, 0.4);
     },
 
@@ -3778,10 +3991,41 @@ var G = require('./boot.js');
       G.Meta.save(); // 波次结束存档升级金币
     },
 
+    // 通关：第20波清空
+    onLevelClear: function () {
+      var pct = Game.base.hp / Game.base.maxHp;
+      Game.victory = {
+        pct: pct,
+        boxes: [true, pct >= 0.7, pct >= 0.999],   // 保底1箱 / ≥70% / 满血
+        claimed: [false, false, false]
+      };
+      G.Meta.unlockLevel(Game.currentLevel + 1);
+      G.Meta.save();
+      G.Audio.play('levelup');
+      G.Camera.shake(5, 0.4);
+      Game.setState('victory');
+    },
+
+    claimBox: function (i) {
+      var v = Game.victory;
+      if (!v || v.claimed[i] || !v.boxes[i]) { G.Audio.play('error'); return; }
+      v.claimed[i] = true;
+      var amt = D.LEVELS.BOX_REWARDS[i];
+      G.Meta.addDiamonds(amt);
+      G.Audio.play('coin');
+      G.FX.text(Game.base.x, Game.base.y - 60, '+' + amt + ' 钻石', '#7ef9ff', 16);
+      G.FX.ring(Game.base.x, Game.base.y, '#7ef9ff', 60, 0.5, 4);
+    },
+
+    nextLevel: function () {
+      if (Game.currentLevel >= D.LEVELS.TOTAL) { Game.showMsg('已是最终关！', '#ffd166', 2); return; }
+      Game.startRun(Game.currentLevel + 1);
+    },
+
     gameOver: function () {
-      // 更新纪录
-      if (G.Waves.wave > Game.best.wave || (G.Waves.wave === Game.best.wave && Game.kills > Game.best.kills)) {
-        Game.best = { wave: G.Waves.wave, kills: Game.kills };
+      // 更新纪录（关卡进度）
+      if (Game.currentLevel > Game.best.lv || (Game.currentLevel === Game.best.lv && G.Waves.wave > (Game.best.wv || 0))) {
+        Game.best = { lv: Game.currentLevel, wv: G.Waves.wave };
         G.P.storage.set('lx_best', Game.best);
       }
       G.Meta.save(); // 结算存档升级金币
@@ -3923,9 +4167,9 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog') {
+      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'victory') {
         // 菜单/英雄/结算只画背景层
-        if (Game.state === 'gameover') {
+        if (Game.state === 'gameover' || Game.state === 'victory') {
           G.Bg.draw(ctx, ox, oy);
           G.Bg.drawBase(ctx, Game.base, ox, oy);
           G.Hero.draw(ctx, ox, oy);

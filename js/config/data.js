@@ -211,6 +211,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.0', title: '关卡系统上线', lines: ['50个关卡，每关20波，通关开宝箱', '主界面左右箭头选关，逐关解锁', '新增钻石：满血通关300钻/≥70%150钻/保底50钻'] },
     { ver: 'v0.4.2', title: '崩解爆弹冷却制', lines: ['满级连环崩解改为20秒冷却', '低等级冷却6~15秒，冷却期击杀不计数'] },
     { ver: 'v0.4.1', title: '拾取贴身修复', lines: ['金币经验飞到身上才消失，不再半空蒸发'] },
     { ver: 'v0.4.0', title: 'Boss/精英DPS定价', lines: ['Boss血量=主角DPS×15，精英=×7', '10波起小怪数量×3，同屏上限75'] },
@@ -221,6 +222,21 @@ var G = require('../boot.js');
     { ver: 'v0.1.0', title: '首次发布', lines: ['割草 × 塔防 × 英雄合成'] }
   ];
 
-  D.VERSION = 'v0.4.3';
+  // ★ 关卡系统：50关 × 每关20波
+  D.LEVELS = {
+    TOTAL: 50,
+    WAVES: 20,             // 每关波次
+    HP_WAVE: 1.12,         // 波内血量：每波×1.12（第20波≈开局8.6倍）
+    BUDGET_WAVE: 1.13,     // 波内数量预算：每波×1.13
+    DIFF: 1.15,            // 关间难度基数（血量）：每关×1.15，50关≈1074倍
+    DIFF_BUDGET_POW: 0.6,  // 数量预算随关间难度的缩放指数（防爆屏）
+    BOSS_WAVES: [10, 20],  // 关内Boss波（20=关底Boss）
+    BOX_REWARDS: [50, 100, 150], // 三档宝箱钻石：30%档/70%档/满血档
+    NAMES: ['静谧草原', '荆棘丛林', '沉默森林', '风语荒漠', '霜冻苔原',
+            '幽暗洞穴', '熔岩裂谷', '浮空遗迹', '深渊裂隙', '星陨之巅'],
+    nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
+  };
+
+  D.VERSION = 'v0.5.0';
   G.D = D;
 })();
