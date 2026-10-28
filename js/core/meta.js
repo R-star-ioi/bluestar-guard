@@ -41,6 +41,7 @@ var G = require('../boot.js');
     weapons: [],                      // 武器背包 [{ uid, cls, tier, star }]
     equip: {},                        // 各职业已装备武器：{ archer: uid }
     nextWuid: 1,                      // 武器自增 id
+    redeemed: {},                     // 已使用的兑换码 { lxsw666: true }
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -57,6 +58,7 @@ var G = require('../boot.js');
         Meta.weapons = (m.weapons && m.weapons.length !== undefined) ? m.weapons : [];
         Meta.equip = m.equip || {};
         Meta.nextWuid = m.nextWuid || 1;
+        Meta.redeemed = m.redeemed || {};
         // 兼容旧存档：缺 uid 的武器补一个，nextWuid 保证不撞号
         for (var wi = 0; wi < Meta.weapons.length; wi++) {
           var wv = Meta.weapons[wi];
@@ -72,6 +74,7 @@ var G = require('../boot.js');
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
         fx: Meta.fx,
         weapons: Meta.weapons, equip: Meta.equip, nextWuid: Meta.nextWuid,
+        redeemed: Meta.redeemed,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests
       });
     },
@@ -79,6 +82,21 @@ var G = require('../boot.js');
     addDiamonds: function (n) {
       Meta.diamonds += n;
       Meta.save();
+    },
+
+    // 兑换码：返回 { ok, amount, reason: empty|invalid|used }
+    redeem: function (code) {
+      code = String(code || '').trim().toLowerCase();
+      if (!code) return { ok: false, reason: 'empty' };
+      var table = (D && D.CODES) || {};
+      var c = table[code];
+      if (!c) return { ok: false, reason: 'invalid' };
+      if (Meta.redeemed[code]) return { ok: false, reason: 'used' };
+      var amt = c.diamonds || 0;
+      Meta.redeemed[code] = true;
+      Meta.diamonds += amt;
+      Meta.save();
+      return { ok: true, amount: amt };
     },
 
     // 通关后把宝箱放回主界面待领（每关各一份，互不影响）

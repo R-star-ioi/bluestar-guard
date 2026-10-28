@@ -186,6 +186,66 @@ var G = require('../boot.js');
     return rec;
   };
 
+  // ---- 文本输入（兑换码等）：web 用临时 DOM input，微信用小游戏键盘 ----
+  P.askText = function (opts) {
+    opts = opts || {};
+    var finished = false;
+    function finish(val) {
+      if (finished) return;
+      finished = true;
+      if (opts.onDone) opts.onDone(val);
+    }
+    if (P.isWx) {
+      try {
+        var onConfirm = null, onComplete = null;
+        function cleanup() {
+          try {
+            if (onConfirm) wx.offKeyboardConfirm(onConfirm);
+            if (onComplete) wx.offKeyboardComplete(onComplete);
+            wx.hideKeyboard({});
+          } catch (e) { }
+        }
+        onConfirm = function (res) { cleanup(); finish(res.value || ''); };
+        onComplete = function (res) { cleanup(); finish(res.value || ''); };
+        wx.onKeyboardConfirm(onConfirm);
+        wx.onKeyboardComplete(onComplete);
+        wx.showKeyboard({
+          defaultValue: opts.value || '', maxLength: opts.maxLength || 24,
+          multiple: false, confirmHold: false, confirmType: 'done'
+        });
+      } catch (e) { finish(''); }
+      return;
+    }
+
+    // Web：临时输入框浮在画布上
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = opts.value || '';
+    inp.maxLength = opts.maxLength || 24;
+    inp.setAttribute('autocomplete', 'off');
+    inp.setAttribute('spellcheck', 'false');
+    inp.style.cssText = [
+      'position:fixed', 'left:50%', 'top:46%', 'transform:translate(-50%,-50%)',
+      'width:min(300px, 76vw)', 'padding:13px 16px', 'z-index:99999',
+      'background:rgba(12,20,48,0.97)', 'color:#fff',
+      'border:2px solid #7ef9ff', 'border-radius:12px',
+      'font:bold 16px/1.2 sans-serif', 'text-align:center', 'letter-spacing:2px',
+      'outline:none', 'box-shadow:0 0 24px rgba(126,249,255,0.35)'
+    ].join(';');
+    document.body.appendChild(inp);
+    function close(val) {
+      if (inp.parentNode) inp.parentNode.removeChild(inp);
+      finish(val);
+    }
+    inp.addEventListener('input', function () { if (opts.onInput) opts.onInput(inp.value); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); close(inp.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(opts.value || ''); }
+    });
+    inp.addEventListener('blur', function () { close(inp.value); });
+    setTimeout(function () { try { inp.focus(); } catch (e) { } }, 30);
+  };
+
   G.P = P;
 })();
 
@@ -631,6 +691,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.7', title: '兑换码', lines: ['设置页新增兑换码输入', 'lxsw666 → 99999 钻石（每个码只能用一次）'] },
     { ver: 'v0.5.6', title: '武器与抽卡', lines: ['英雄页新增「武器」按钮，可装备/卸下（目前开放弓手）', '主界面新增「背包」与「抽武器」', '品质白→绿→蓝→紫→红，三个同阶合一阶，两个同星红合高一星', '抽卡 60 钻/次：白80% 绿10% 蓝6% 紫3% 红1%，带翻卡动画'] },
     { ver: 'v0.5.5', title: '战斗手感与设置', lines: ['暴击伤害数字更大更红', '17-20 波敌人更硬，关卡之间落差更明显', '清波提示分两行显示', '修复拖拽同名同级英雄无法合成', '新增设置：特效强度滑条（主界面右下角 ⚙️ / 暂停菜单）'] },
     { ver: 'v0.5.4', title: '界面排版整理', lines: ['英雄页：升级/选择改为右侧上下排列，不再压住 Lv 加成说明', '英雄页支持上下拖动滚动，矮屏也能看到全部主角', '局内顶栏去掉钻石（回主界面看），只留局内金币；左侧战绩与英雄数不再重叠', '附加技能栏改为居中显示'] },
@@ -665,7 +726,12 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.6';
+  D.VERSION = 'v0.5.7';
+
+  // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
+  D.CODES = {
+    lxsw666: { diamonds: 99999, note: '新手福利' }
+  };
   G.D = D;
 })();
 
@@ -714,6 +780,7 @@ var G = require('../boot.js');
     weapons: [],                      // 武器背包 [{ uid, cls, tier, star }]
     equip: {},                        // 各职业已装备武器：{ archer: uid }
     nextWuid: 1,                      // 武器自增 id
+    redeemed: {},                     // 已使用的兑换码 { lxsw666: true }
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -730,6 +797,7 @@ var G = require('../boot.js');
         Meta.weapons = (m.weapons && m.weapons.length !== undefined) ? m.weapons : [];
         Meta.equip = m.equip || {};
         Meta.nextWuid = m.nextWuid || 1;
+        Meta.redeemed = m.redeemed || {};
         // 兼容旧存档：缺 uid 的武器补一个，nextWuid 保证不撞号
         for (var wi = 0; wi < Meta.weapons.length; wi++) {
           var wv = Meta.weapons[wi];
@@ -745,6 +813,7 @@ var G = require('../boot.js');
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
         fx: Meta.fx,
         weapons: Meta.weapons, equip: Meta.equip, nextWuid: Meta.nextWuid,
+        redeemed: Meta.redeemed,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests
       });
     },
@@ -752,6 +821,21 @@ var G = require('../boot.js');
     addDiamonds: function (n) {
       Meta.diamonds += n;
       Meta.save();
+    },
+
+    // 兑换码：返回 { ok, amount, reason: empty|invalid|used }
+    redeem: function (code) {
+      code = String(code || '').trim().toLowerCase();
+      if (!code) return { ok: false, reason: 'empty' };
+      var table = (D && D.CODES) || {};
+      var c = table[code];
+      if (!c) return { ok: false, reason: 'invalid' };
+      if (Meta.redeemed[code]) return { ok: false, reason: 'used' };
+      var amt = c.diamonds || 0;
+      Meta.redeemed[code] = true;
+      Meta.diamonds += amt;
+      Meta.save();
+      return { ok: true, amount: amt };
     },
 
     // 通关后把宝箱放回主界面待领（每关各一份，互不影响）
@@ -4650,7 +4734,7 @@ var G = require('../boot.js');
       ctx.fillText('拖动滑块调整；越低越安静，越高越炸裂', W / 2, H * 0.16 + 24);
 
       var pw = Math.min(330, W - 40), px = (W - pw) / 2;
-      var py = H * 0.26, ph = 182;
+      var py = H * 0.26, ph = 272;
       ctx.fillStyle = 'rgba(20,28,60,0.92)';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
       else ctx.fillRect(px, py, pw, ph);
@@ -4705,6 +4789,39 @@ var G = require('../boot.js');
               G.Audio.play('button');
             });
         })(presets[i][1], presets[i][0], i);
+      }
+
+      // 兑换码
+      var redY = py + 180;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = '#cfe3ff';
+      ctx.fillText('兑换码', px + 24, redY);
+
+      var inW = pw - 48 - 92;
+      UI.pill(ctx, px + 24, redY + 10, inW, 40, 'rgba(0,0,0,0.45)', 10);
+      ctx.strokeStyle = 'rgba(130,170,255,0.35)';
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px + 24.5, redY + 10.5, inW - 1, 39, 10); ctx.stroke(); }
+      ctx.font = '13px sans-serif';
+      ctx.fillStyle = game.redeemText ? '#fff' : 'rgba(255,255,255,0.32)';
+      ctx.fillText(game.redeemText || '点击输入', px + 36, redY + 35);
+      UI.reg('redeem_input', px + 24, redY + 10, inW, 40, function () {
+        G.P.askText({
+          value: game.redeemText || '',
+          maxLength: 24,
+          onInput: function (v) { game.setRedeemText(v); },
+          onDone: function (v) { game.setRedeemText(v); }
+        });
+      });
+      UI.button(ctx, 'redeem_btn', px + pw - 24 - 84, redY + 10, 84, 40, '兑换', null, '#c0392b', function () {
+        game.redeemCode();
+      });
+      if (game.redeemMsg && Date.now() - game.redeemMsg.t < 4500) {
+        ctx.textAlign = 'center';
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = game.redeemMsg.color;
+        ctx.fillText(game.redeemMsg.text, px + pw / 2, redY + 72);
       }
 
       UI.button(ctx, 'set_back', W / 2 - 90, py + ph + 26, 180, 48, '‹ 返回', null, '#2d6cdf', function () {
@@ -4775,6 +4892,8 @@ var G = require('./boot.js');
     weaponScroll: 0,
     weaponBack: 'menu',
     gacha: null,         // 抽卡结果动画状态
+    redeemText: '',      // 设置页兑换码输入
+    redeemMsg: null,     // { text, color, t }
 
     init: function () {
       G.Input.init();
@@ -4923,6 +5042,25 @@ var G = require('./boot.js');
     closeGacha: function () {
       Game.gacha = null;
       G.Audio.play('button');
+    },
+
+    // ============ 兑换码 ============
+    setRedeemText: function (v) {
+      if (v === null || v === undefined) return;
+      Game.redeemText = String(v).slice(0, 24);
+    },
+    redeemCode: function () {
+      var res = G.Meta.redeem(Game.redeemText);
+      if (res.ok) {
+        G.Audio.play('coin');
+        Game.redeemMsg = { text: '兑换成功　+' + res.amount + ' 钻石', color: '#7ef9ff', t: Date.now() };
+        Game.redeemText = '';
+      } else {
+        G.Audio.play('error');
+        var why = res.reason === 'used' ? '该兑换码已经用过了'
+          : (res.reason === 'empty' ? '请先输入兑换码' : '兑换码无效');
+        Game.redeemMsg = { text: why, color: '#ff8b8b', t: Date.now() };
+      }
     },
 
     // ============ 经济 ============

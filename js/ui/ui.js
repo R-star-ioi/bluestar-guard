@@ -1544,7 +1544,7 @@ var G = require('../boot.js');
       ctx.fillText('拖动滑块调整；越低越安静，越高越炸裂', W / 2, H * 0.16 + 24);
 
       var pw = Math.min(330, W - 40), px = (W - pw) / 2;
-      var py = H * 0.26, ph = 182;
+      var py = H * 0.26, ph = 272;
       ctx.fillStyle = 'rgba(20,28,60,0.92)';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
       else ctx.fillRect(px, py, pw, ph);
@@ -1599,6 +1599,39 @@ var G = require('../boot.js');
               G.Audio.play('button');
             });
         })(presets[i][1], presets[i][0], i);
+      }
+
+      // 兑换码
+      var redY = py + 180;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = '#cfe3ff';
+      ctx.fillText('兑换码', px + 24, redY);
+
+      var inW = pw - 48 - 92;
+      UI.pill(ctx, px + 24, redY + 10, inW, 40, 'rgba(0,0,0,0.45)', 10);
+      ctx.strokeStyle = 'rgba(130,170,255,0.35)';
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px + 24.5, redY + 10.5, inW - 1, 39, 10); ctx.stroke(); }
+      ctx.font = '13px sans-serif';
+      ctx.fillStyle = game.redeemText ? '#fff' : 'rgba(255,255,255,0.32)';
+      ctx.fillText(game.redeemText || '点击输入', px + 36, redY + 35);
+      UI.reg('redeem_input', px + 24, redY + 10, inW, 40, function () {
+        G.P.askText({
+          value: game.redeemText || '',
+          maxLength: 24,
+          onInput: function (v) { game.setRedeemText(v); },
+          onDone: function (v) { game.setRedeemText(v); }
+        });
+      });
+      UI.button(ctx, 'redeem_btn', px + pw - 24 - 84, redY + 10, 84, 40, '兑换', null, '#c0392b', function () {
+        game.redeemCode();
+      });
+      if (game.redeemMsg && Date.now() - game.redeemMsg.t < 4500) {
+        ctx.textAlign = 'center';
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = game.redeemMsg.color;
+        ctx.fillText(game.redeemMsg.text, px + pw / 2, redY + 72);
       }
 
       UI.button(ctx, 'set_back', W / 2 - 90, py + ph + 26, 180, 48, '‹ 返回', null, '#2d6cdf', function () {

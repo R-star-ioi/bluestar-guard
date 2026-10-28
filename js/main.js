@@ -27,6 +27,8 @@ var G = require('./boot.js');
     weaponScroll: 0,
     weaponBack: 'menu',
     gacha: null,         // 抽卡结果动画状态
+    redeemText: '',      // 设置页兑换码输入
+    redeemMsg: null,     // { text, color, t }
 
     init: function () {
       G.Input.init();
@@ -175,6 +177,25 @@ var G = require('./boot.js');
     closeGacha: function () {
       Game.gacha = null;
       G.Audio.play('button');
+    },
+
+    // ============ 兑换码 ============
+    setRedeemText: function (v) {
+      if (v === null || v === undefined) return;
+      Game.redeemText = String(v).slice(0, 24);
+    },
+    redeemCode: function () {
+      var res = G.Meta.redeem(Game.redeemText);
+      if (res.ok) {
+        G.Audio.play('coin');
+        Game.redeemMsg = { text: '兑换成功　+' + res.amount + ' 钻石', color: '#7ef9ff', t: Date.now() };
+        Game.redeemText = '';
+      } else {
+        G.Audio.play('error');
+        var why = res.reason === 'used' ? '该兑换码已经用过了'
+          : (res.reason === 'empty' ? '请先输入兑换码' : '兑换码无效');
+        Game.redeemMsg = { text: why, color: '#ff8b8b', t: Date.now() };
+      }
     },
 
     // ============ 经济 ============

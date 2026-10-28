@@ -150,5 +150,65 @@ var G = require('../boot.js');
     return rec;
   };
 
+  // ---- 文本输入（兑换码等）：web 用临时 DOM input，微信用小游戏键盘 ----
+  P.askText = function (opts) {
+    opts = opts || {};
+    var finished = false;
+    function finish(val) {
+      if (finished) return;
+      finished = true;
+      if (opts.onDone) opts.onDone(val);
+    }
+    if (P.isWx) {
+      try {
+        var onConfirm = null, onComplete = null;
+        function cleanup() {
+          try {
+            if (onConfirm) wx.offKeyboardConfirm(onConfirm);
+            if (onComplete) wx.offKeyboardComplete(onComplete);
+            wx.hideKeyboard({});
+          } catch (e) { }
+        }
+        onConfirm = function (res) { cleanup(); finish(res.value || ''); };
+        onComplete = function (res) { cleanup(); finish(res.value || ''); };
+        wx.onKeyboardConfirm(onConfirm);
+        wx.onKeyboardComplete(onComplete);
+        wx.showKeyboard({
+          defaultValue: opts.value || '', maxLength: opts.maxLength || 24,
+          multiple: false, confirmHold: false, confirmType: 'done'
+        });
+      } catch (e) { finish(''); }
+      return;
+    }
+
+    // Web：临时输入框浮在画布上
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = opts.value || '';
+    inp.maxLength = opts.maxLength || 24;
+    inp.setAttribute('autocomplete', 'off');
+    inp.setAttribute('spellcheck', 'false');
+    inp.style.cssText = [
+      'position:fixed', 'left:50%', 'top:46%', 'transform:translate(-50%,-50%)',
+      'width:min(300px, 76vw)', 'padding:13px 16px', 'z-index:99999',
+      'background:rgba(12,20,48,0.97)', 'color:#fff',
+      'border:2px solid #7ef9ff', 'border-radius:12px',
+      'font:bold 16px/1.2 sans-serif', 'text-align:center', 'letter-spacing:2px',
+      'outline:none', 'box-shadow:0 0 24px rgba(126,249,255,0.35)'
+    ].join(';');
+    document.body.appendChild(inp);
+    function close(val) {
+      if (inp.parentNode) inp.parentNode.removeChild(inp);
+      finish(val);
+    }
+    inp.addEventListener('input', function () { if (opts.onInput) opts.onInput(inp.value); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); close(inp.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(opts.value || ''); }
+    });
+    inp.addEventListener('blur', function () { close(inp.value); });
+    setTimeout(function () { try { inp.focus(); } catch (e) { } }, 30);
+  };
+
   G.P = P;
 })();
