@@ -84,13 +84,21 @@ var G = require('../boot.js');
       Meta.save();
     },
 
-    // 兑换码：返回 { ok, amount, reason: empty|invalid|used }
+    // 兑换码：返回 { ok, amount, reason: empty|invalid|used|ingame }；dev 码可重复使用
     redeem: function (code) {
       code = String(code || '').trim().toLowerCase();
       if (!code) return { ok: false, reason: 'empty' };
       var table = (D && D.CODES) || {};
       var c = table[code];
       if (!c) return { ok: false, reason: 'invalid' };
+      // 开发者码：不占一次性名额，仅在局内（暂停中）生效
+      if (c.dev) {
+        var g = G.game;
+        var inRun = g && (g.state === 'paused' || (g.state === 'settings' && g.settingsBack === 'paused'));
+        if (!inRun) return { ok: false, reason: 'ingame' };
+        g.devJumpWave();
+        return { ok: true, dev: true, msg: c.note || '开发者指令已执行' };
+      }
       if (Meta.redeemed[code]) return { ok: false, reason: 'used' };
       var amt = c.diamonds || 0;
       Meta.redeemed[code] = true;

@@ -594,6 +594,8 @@ var G = require('../boot.js');
   // ★ 世界吞噬者（每关第 20 波关底蠕虫 Boss，v0.5.15）
   D.DEVOURER = {
     SEG_COUNT: 72,         // 体节数
+    SEG_R: 32,             // 体节半径（≈基地大小，玩家 r14 的 5 倍直径量级）
+    SEG_SPACING: 40,       // 节间距（轻微重叠，视觉连贯）
     SPEED_RATIO: 0.85,     // 速度 = 玩家速度 × 0.85
     DASH_DMG: 55,          // 冲撞
     SPIT_DMG: 15,          // 魔唾液命中
@@ -758,6 +760,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.16', title: '吞噬者调优 + 开发者码', lines: ['吞噬者体型加大到接近基地大小（体节半径 32，约为玩家 5 倍身位）', '新增开发者兑换码：游戏中暂停后输入可跳到第 19 波（可重复使用）', '受击闪白改为淡色，不再整条发白'] },
     { ver: 'v0.5.15', title: '世界吞噬者', lines: ['第 20 波关底 Boss 换成蠕虫「世界吞噬者」：72 体节，打碎一节就分裂成多条', '它存活期间循环播放专属 BGM（60% 音量）', '会冲撞与喷吐魔唾液，命中会禁疗 / 减速 / 易伤', '受到的所有伤害 -20%，爆炸类再 -80%，请别指望炎爆速刷'] },
     { ver: 'v0.5.14', title: '怪物血量重做', lines: ['小怪基础 500 / 精英 3500 / Boss 15000，不再一箭秒', '精英与 Boss 血量改为固定基线，不再随你的装备浮动', '波内与关间成长重新标定，后期压迫感更强'] },
     { ver: 'v0.5.13', title: 'HUD 调整', lines: ['波次倒计时移到屏幕上方，字号放大一倍，不再挡住左上战绩', '波次间隔改为 5 秒', '左上角新增当前主角 DPS 秒伤'] },
@@ -803,11 +806,12 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.15';
+  D.VERSION = 'v0.5.16';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
-    lxsw666: { diamonds: 99999, note: '新手福利' }
+    lxsw666: { diamonds: 99999, note: '新手福利' },
+    kfz001: { dev: true, note: '已跳到第 19 波（倒计时结束后打世界吞噬者）' }   // 开发者调试码，可重复使用
   };
   G.D = D;
 })();
@@ -900,13 +904,21 @@ var G = require('../boot.js');
       Meta.save();
     },
 
-    // 兑换码：返回 { ok, amount, reason: empty|invalid|used }
+    // 兑换码：返回 { ok, amount, reason: empty|invalid|used|ingame }；dev 码可重复使用
     redeem: function (code) {
       code = String(code || '').trim().toLowerCase();
       if (!code) return { ok: false, reason: 'empty' };
       var table = (D && D.CODES) || {};
       var c = table[code];
       if (!c) return { ok: false, reason: 'invalid' };
+      // 开发者码：不占一次性名额，仅在局内（暂停中）生效
+      if (c.dev) {
+        var g = G.game;
+        var inRun = g && (g.state === 'paused' || (g.state === 'settings' && g.settingsBack === 'paused'));
+        if (!inRun) return { ok: false, reason: 'ingame' };
+        g.devJumpWave();
+        return { ok: true, dev: true, msg: c.note || '开发者指令已执行' };
+      }
       if (Meta.redeemed[code]) return { ok: false, reason: 'used' };
       var amt = c.diamonds || 0;
       Meta.redeemed[code] = true;
@@ -3503,19 +3515,22 @@ var G = require('../boot.js');
       var n = D.DEVOURER.SEG_COUNT;
       var total = D.DEVOURER.hpOf(level);
       var unit = total / (n - 1 + 2.5);          // 头按 2.5 节计
-      var spacing = 19;
+      var spacing = D.DEVOURER.SEG_SPACING;
       var pl = G.Player;
       var a = Math.random() * Math.PI * 2;
       var hx = U.clamp(pl.x + Math.cos(a) * 620, 80, D.MAP_W - 80);
       var hy = U.clamp(pl.y + Math.sin(a) * 620, 80, D.MAP_H - 80);
 
+      // 沿圆弧排布（72×40=2880px，直线会伸出地图；弧线让身体自然盘在图内）
       var segs = [];
+      var cx = hx, cy = hy, dir = a + Math.PI;
       for (var i = 0; i < n; i++) {
         var hp = unit * (i === 0 ? 2.5 : 1);
-        var r = i === 0 ? 21 : (i === n - 1 ? 11 : 14);
+        var r = i === 0 ? D.DEVOURER.SEG_R * 1.4 : (i === n - 1 ? D.DEVOURER.SEG_R * 0.78 : D.DEVOURER.SEG_R);
         var e = {
           isWorm: true,
-          type: 'worm', x: hx - Math.cos(a) * i * spacing, y: hy - Math.sin(a) * i * spacing,
+          type: 'worm',
+          x: U.clamp(cx, 20, D.MAP_W - 20), y: U.clamp(cy, 20, D.MAP_H - 20),
           hp: hp, maxHp: hp,
           r: r, speed: 0, dmg: 0,
           color: '#c9a3c9', wave: D.LEVELS.WAVES, level: level,
@@ -3529,7 +3544,9 @@ var G = require('../boot.js');
         };
         G.Enemy.list.push(e);
         segs.push(e);
-      }
+        dir += 0.06;                            // 每节转向，形成弧（弧径 ≈667px，整体盘在图内）
+        cx += Math.cos(dir) * spacing;
+        cy += Math.sin(dir) * spacing;      }
       Devourer.worms.push(Devourer.makeWorm(segs, level, spacing));
       if (G.P.playBgm) G.P.playBgm('Music/世界吞噬者.mp3', 0.6);
     },
@@ -3796,8 +3813,8 @@ var G = require('../boot.js');
           ctx.ellipse(sx, sy + s.r * 0.8, r * 0.9, r * 0.38, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          // 身体
-          ctx.fillStyle = flash ? '#ffffff' : '#c9a3c9';
+          // 身体（受击闪用淡白，避免高攻速下整条长期发白）
+          ctx.fillStyle = flash ? '#ecdcec' : '#c9a3c9';
           ctx.strokeStyle = '#7d5678';
           ctx.lineWidth = 2.5;
           ctx.beginPath();
@@ -3812,7 +3829,7 @@ var G = require('../boot.js');
 
           // 绿斑（每节固定 2 个，位置随索引变化，对齐参考图）
           if (!isHead && !isTail) {
-            ctx.fillStyle = flash ? '#dfe9c8' : '#b9d24b';
+            ctx.fillStyle = flash ? '#e4eccb' : '#b9d24b';
             var o1 = (i * 37) % 10 / 10, o2 = (i * 61) % 10 / 10;
             ctx.beginPath();
             ctx.ellipse(sx + (o1 - 0.5) * r, sy + (o2 - 0.4) * r * 0.8, r * 0.16, r * 0.11, o1 * 3, 0, Math.PI * 2);
@@ -3880,8 +3897,8 @@ var G = require('../boot.js');
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(ang);
-      var body = flash ? '#ffffff' : '#c9a3c9';
-      var dark = flash ? '#dddddd' : '#4a2b47';
+      var body = flash ? '#ecdcec' : '#c9a3c9';
+      var dark = flash ? '#ddd0dd' : '#4a2b47';
       var gold = flash ? '#ffeeaa' : '#d4b106';
       // 角（头顶两根，向后弯）
       ctx.fillStyle = gold;
@@ -6353,14 +6370,29 @@ var G = require('./boot.js');
       var res = G.Meta.redeem(Game.redeemText);
       if (res.ok) {
         G.Audio.play('coin');
-        Game.redeemMsg = { text: '兑换成功　+' + res.amount + ' 钻石', color: '#7ef9ff', t: Date.now() };
+        Game.redeemMsg = { text: res.dev ? res.msg : ('兑换成功　+' + res.amount + ' 钻石'), color: '#7ef9ff', t: Date.now() };
         Game.redeemText = '';
       } else {
         G.Audio.play('error');
         var why = res.reason === 'used' ? '该兑换码已经用过了'
-          : (res.reason === 'empty' ? '请先输入兑换码' : '兑换码无效');
+          : (res.reason === 'empty' ? '请先输入兑换码'
+          : (res.reason === 'ingame' ? 'kfz001 需在游戏中（暂停后）使用' : '兑换码无效'));
         Game.redeemMsg = { text: why, color: '#ff8b8b', t: Date.now() };
       }
+    },
+
+    // 开发者：清场并跳到第 19 波（倒计时 2s 后进 Boss 波，方便反复测吞噬者）
+    devJumpWave: function () {
+      G.Enemy.list.length = 0;
+      G.Proj.clear();
+      if (G.WeaponFX) G.WeaponFX.reset();
+      if (G.Devourer) G.Devourer.reset();
+      G.Waves.spawnQueue = 0;
+      G.Waves.wave = 19;
+      G.Waves.state = 'rest';
+      G.Waves.timer = 2;
+      Game.setState('playing');
+      Game.showMsg('DEV：已跳至第 19 波', '#7ef9ff', 1.6);
     },
 
     // ============ 经济 ============

@@ -32,19 +32,22 @@ var G = require('../boot.js');
       var n = D.DEVOURER.SEG_COUNT;
       var total = D.DEVOURER.hpOf(level);
       var unit = total / (n - 1 + 2.5);          // 头按 2.5 节计
-      var spacing = 19;
+      var spacing = D.DEVOURER.SEG_SPACING;
       var pl = G.Player;
       var a = Math.random() * Math.PI * 2;
       var hx = U.clamp(pl.x + Math.cos(a) * 620, 80, D.MAP_W - 80);
       var hy = U.clamp(pl.y + Math.sin(a) * 620, 80, D.MAP_H - 80);
 
+      // 沿圆弧排布（72×40=2880px，直线会伸出地图；弧线让身体自然盘在图内）
       var segs = [];
+      var cx = hx, cy = hy, dir = a + Math.PI;
       for (var i = 0; i < n; i++) {
         var hp = unit * (i === 0 ? 2.5 : 1);
-        var r = i === 0 ? 21 : (i === n - 1 ? 11 : 14);
+        var r = i === 0 ? D.DEVOURER.SEG_R * 1.4 : (i === n - 1 ? D.DEVOURER.SEG_R * 0.78 : D.DEVOURER.SEG_R);
         var e = {
           isWorm: true,
-          type: 'worm', x: hx - Math.cos(a) * i * spacing, y: hy - Math.sin(a) * i * spacing,
+          type: 'worm',
+          x: U.clamp(cx, 20, D.MAP_W - 20), y: U.clamp(cy, 20, D.MAP_H - 20),
           hp: hp, maxHp: hp,
           r: r, speed: 0, dmg: 0,
           color: '#c9a3c9', wave: D.LEVELS.WAVES, level: level,
@@ -58,7 +61,9 @@ var G = require('../boot.js');
         };
         G.Enemy.list.push(e);
         segs.push(e);
-      }
+        dir += 0.06;                            // 每节转向，形成弧（弧径 ≈667px，整体盘在图内）
+        cx += Math.cos(dir) * spacing;
+        cy += Math.sin(dir) * spacing;      }
       Devourer.worms.push(Devourer.makeWorm(segs, level, spacing));
       if (G.P.playBgm) G.P.playBgm('Music/世界吞噬者.mp3', 0.6);
     },
@@ -325,8 +330,8 @@ var G = require('../boot.js');
           ctx.ellipse(sx, sy + s.r * 0.8, r * 0.9, r * 0.38, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          // 身体
-          ctx.fillStyle = flash ? '#ffffff' : '#c9a3c9';
+          // 身体（受击闪用淡白，避免高攻速下整条长期发白）
+          ctx.fillStyle = flash ? '#ecdcec' : '#c9a3c9';
           ctx.strokeStyle = '#7d5678';
           ctx.lineWidth = 2.5;
           ctx.beginPath();
@@ -341,7 +346,7 @@ var G = require('../boot.js');
 
           // 绿斑（每节固定 2 个，位置随索引变化，对齐参考图）
           if (!isHead && !isTail) {
-            ctx.fillStyle = flash ? '#dfe9c8' : '#b9d24b';
+            ctx.fillStyle = flash ? '#e4eccb' : '#b9d24b';
             var o1 = (i * 37) % 10 / 10, o2 = (i * 61) % 10 / 10;
             ctx.beginPath();
             ctx.ellipse(sx + (o1 - 0.5) * r, sy + (o2 - 0.4) * r * 0.8, r * 0.16, r * 0.11, o1 * 3, 0, Math.PI * 2);
@@ -409,8 +414,8 @@ var G = require('../boot.js');
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(ang);
-      var body = flash ? '#ffffff' : '#c9a3c9';
-      var dark = flash ? '#dddddd' : '#4a2b47';
+      var body = flash ? '#ecdcec' : '#c9a3c9';
+      var dark = flash ? '#ddd0dd' : '#4a2b47';
       var gold = flash ? '#ffeeaa' : '#d4b106';
       // 角（头顶两根，向后弯）
       ctx.fillStyle = gold;

@@ -194,14 +194,29 @@ var G = require('./boot.js');
       var res = G.Meta.redeem(Game.redeemText);
       if (res.ok) {
         G.Audio.play('coin');
-        Game.redeemMsg = { text: '兑换成功　+' + res.amount + ' 钻石', color: '#7ef9ff', t: Date.now() };
+        Game.redeemMsg = { text: res.dev ? res.msg : ('兑换成功　+' + res.amount + ' 钻石'), color: '#7ef9ff', t: Date.now() };
         Game.redeemText = '';
       } else {
         G.Audio.play('error');
         var why = res.reason === 'used' ? '该兑换码已经用过了'
-          : (res.reason === 'empty' ? '请先输入兑换码' : '兑换码无效');
+          : (res.reason === 'empty' ? '请先输入兑换码'
+          : (res.reason === 'ingame' ? 'kfz001 需在游戏中（暂停后）使用' : '兑换码无效'));
         Game.redeemMsg = { text: why, color: '#ff8b8b', t: Date.now() };
       }
+    },
+
+    // 开发者：清场并跳到第 19 波（倒计时 2s 后进 Boss 波，方便反复测吞噬者）
+    devJumpWave: function () {
+      G.Enemy.list.length = 0;
+      G.Proj.clear();
+      if (G.WeaponFX) G.WeaponFX.reset();
+      if (G.Devourer) G.Devourer.reset();
+      G.Waves.spawnQueue = 0;
+      G.Waves.wave = 19;
+      G.Waves.state = 'rest';
+      G.Waves.timer = 2;
+      Game.setState('playing');
+      Game.showMsg('DEV：已跳至第 19 波', '#7ef9ff', 1.6);
     },
 
     // ============ 经济 ============
