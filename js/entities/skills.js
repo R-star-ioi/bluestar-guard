@@ -131,10 +131,16 @@ var G = require('../boot.js');
     // 通用爆炸（爆弹技能 + 盾破碎共用）
     explode: function (x, y, r, dmg, game, depth, isShield) {
       var lv = Skills.levelOf('bomb');
+      // 限流：同帧多爆时，音效/震屏/大粒子只播第一爆（吞怪战连锁爆炸会瞬间成百上千）
+      var now = Date.now();
+      var quiet = now - (Skills._lastBoomT || 0) < 60;
+      Skills._lastBoomT = now;
       G.FX.ring(x, y, '#ffb142', r, 0.35, 5);
-      G.FX.burst(x, y, 14, '#ffb142', 220, 0.5, 5);
-      G.Camera.shake(4, 0.2);
-      G.Audio.play('boom');
+      if (!quiet) {
+        G.FX.burst(x, y, 14, '#ffb142', 220, 0.5, 5);
+        G.Camera.shake(4, 0.2);
+        G.Audio.play('boom');
+      }
       var chainChance = isShield ? 0 : [0, 0, 0, 0.25, 0.25, 0.5][lv];
       var chainCap = isShield ? 0 : [0, 0, 0, 2, 4, 999][lv];
       var stun = isShield ? 0 : [0, 0, 0, 0, 0.8, 1.0][lv];
@@ -161,7 +167,8 @@ var G = require('../boot.js');
           }
           if (stun > 0 && !e.dead) e.stunT = Math.max(e.stunT || 0, stun);
           if (isShield && lv >= 5) Skills._shockHeal += 3;
-          if (chainChance > 0 && depth < chainCap && !e.dead && Math.random() < chainChance) {
+          if (chainChance > 0 && depth < chainCap && !e.dead && !e.boss && !e.isWorm &&
+              Skills.booms.length < 24 && Math.random() < chainChance) {
             Skills.booms.push({ x: e.x, y: e.y, delay: 0.15, depth: depth + 1 });
           }
         }
@@ -316,11 +323,13 @@ var G = require('../boot.js');
         Skills.vacuum = null;
       }
 
-      // 崩解爆弹队列
+      // 崩解爆弹队列（每帧最多引爆 2 个，防止连锁爆潮压垮主循环）
+      var boomBudget = 2;
       for (i = Skills.booms.length - 1; i >= 0; i--) {
         var bm = Skills.booms[i];
         bm.delay -= dt;
-        if (bm.delay <= 0) {
+        if (bm.delay <= 0 && boomBudget > 0) {
+          boomBudget--;
           Skills.booms.splice(i, 1);
           var blv = Skills.levelOf('bomb');
           if (blv > 0) {

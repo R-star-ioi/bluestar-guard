@@ -761,6 +761,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.21', title: '爆弹连锁性能优化', lines: ['修复：崩解爆弹连锁打到世界吞噬者的 72 个体节时指数级增殖，卡成幻灯片甚至死机', '体节不再作为连锁跳板；连锁爆弹并发上限 24；每帧最多引爆 2 个；同帧多爆只播一次音效/震屏'] },
     { ver: 'v0.5.20', title: '吞噬者战基地无敌', lines: ['世界吞噬者存活期间基地被保护罩罩住：完全无敌（青色能量罩可视化），Boss 战专心走位'] },
     { ver: 'v0.5.19', title: '吞噬者战保护基地', lines: ['世界吞噬者存活期间，基地每次受击只扣 1hp，安心走位躲 Boss'] },
     { ver: 'v0.5.18', title: '爆弹防秒杀 + 吞噬者再减速', lines: ['崩解爆弹对 Boss / 世界吞噬者：单次爆炸伤害不超过其最大血量的 15%，无法再被连环秒杀', '吞噬者普通移速降为玩家的 35%，冲撞时为玩家的 90%'] },
@@ -811,7 +812,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.20';
+  D.VERSION = 'v0.5.21';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -2734,10 +2735,16 @@ var G = require('../boot.js');
     // 通用爆炸（爆弹技能 + 盾破碎共用）
     explode: function (x, y, r, dmg, game, depth, isShield) {
       var lv = Skills.levelOf('bomb');
+      // 限流：同帧多爆时，音效/震屏/大粒子只播第一爆（吞怪战连锁爆炸会瞬间成百上千）
+      var now = Date.now();
+      var quiet = now - (Skills._lastBoomT || 0) < 60;
+      Skills._lastBoomT = now;
       G.FX.ring(x, y, '#ffb142', r, 0.35, 5);
-      G.FX.burst(x, y, 14, '#ffb142', 220, 0.5, 5);
-      G.Camera.shake(4, 0.2);
-      G.Audio.play('boom');
+      if (!quiet) {
+        G.FX.burst(x, y, 14, '#ffb142', 220, 0.5, 5);
+        G.Camera.shake(4, 0.2);
+        G.Audio.play('boom');
+      }
       var chainChance = isShield ? 0 : [0, 0, 0, 0.25, 0.25, 0.5][lv];
       var chainCap = isShield ? 0 : [0, 0, 0, 2, 4, 999][lv];
       var stun = isShield ? 0 : [0, 0, 0, 0, 0.8, 1.0][lv];
@@ -2764,7 +2771,8 @@ var G = require('../boot.js');
           }
           if (stun > 0 && !e.dead) e.stunT = Math.max(e.stunT || 0, stun);
           if (isShield && lv >= 5) Skills._shockHeal += 3;
-          if (chainChance > 0 && depth < chainCap && !e.dead && Math.random() < chainChance) {
+          if (chainChance > 0 && depth < chainCap && !e.dead && !e.boss && !e.isWorm &&
+              Skills.booms.length < 24 && Math.random() < chainChance) {
             Skills.booms.push({ x: e.x, y: e.y, delay: 0.15, depth: depth + 1 });
           }
         }
@@ -2919,11 +2927,13 @@ var G = require('../boot.js');
         Skills.vacuum = null;
       }
 
-      // 崩解爆弹队列
+      // 崩解爆弹队列（每帧最多引爆 2 个，防止连锁爆潮压垮主循环）
+      var boomBudget = 2;
       for (i = Skills.booms.length - 1; i >= 0; i--) {
         var bm = Skills.booms[i];
         bm.delay -= dt;
-        if (bm.delay <= 0) {
+        if (bm.delay <= 0 && boomBudget > 0) {
+          boomBudget--;
           Skills.booms.splice(i, 1);
           var blv = Skills.levelOf('bomb');
           if (blv > 0) {
