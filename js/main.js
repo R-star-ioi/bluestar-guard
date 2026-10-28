@@ -173,7 +173,7 @@ var G = require('./boot.js');
       G.Meta.diamonds -= cost;
       G.Meta.save();
       var cards = G.Weapon.draw(n >= 10 ? 10 : 1, 'archer');
-      Game.gacha = { cards: cards, start: Date.now(), cost: cost };
+      Game.gacha = { cards: cards, start: Date.now(), cost: cost, sfx: {} };
       G.Audio.play('coin');
     },
     skipGacha: function () {

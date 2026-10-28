@@ -469,6 +469,16 @@ var G = require('../boot.js');
         case 'button': Audio.tone(700, 500, 0.05, 0.05, 'square'); break;
         case 'error': Audio.tone(200, 150, 0.12, 0.08, 'square'); break;
         case 'crystal': Audio.tone(900, 300, 0.25, 0.15, 'sawtooth'); break;
+        case 'flip': Audio.tone(880, 1320, 0.06, 0.05, 'triangle'); break;
+        case 'rare':   // 紫：一段上行琶音 + 一点沙沙
+          Audio.noise(0.22, 0.05);
+          [784, 988, 1175, 1568].forEach(function (f, i) { Audio.tone(f, f, 0.22, 0.07, 'sine', i * 0.07); });
+          break;
+        case 'rarebig':   // 红：更长更亮，配一个低频轰鸣
+          Audio.noise(0.35, 0.09);
+          [523, 659, 784, 1047, 1319, 1568].forEach(function (f, i) { Audio.tone(f, f, 0.3, 0.075, 'sine', i * 0.085); });
+          Audio.tone(140, 55, 0.5, 0.1, 'sawtooth', 0.05);
+          break;
         case 'gameover': [400, 330, 262, 196].forEach(function (f, i) { Audio.tone(f, f * 0.9, 0.3, 0.1, 'sine', i * 0.22); }); break;
       }
     }
@@ -691,9 +701,9 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.10', title: '抽卡与背包手感', lines: ['卡池概率改成两行显示，不再顶出卡片', '抽到紫/红品质时翻牌慢放 + 音效', '武器列表滚动后，顶栏区域不再误点到下面的武器'] },
     { ver: 'v0.5.9', title: '武器朝向修复', lines: ['主角朝右时武器没有镜像，弓箭方向是反的', '现在朝哪边就镜像到哪边；英雄的弓也统一朝外'] },
     { ver: 'v0.5.8', title: '武器外观', lines: ['装备的武器会显示在角色手上（按品质取图，紫/红带光晕）', '武器图新增透明底版本，游戏内用抠图、卡面用带背景版'] },
-    { ver: 'v0.5.7', title: '兑换码', lines: ['设置页新增兑换码输入', 'lxsw666 → 99999 钻石（每个码只能用一次）'] },
     { ver: 'v0.5.6', title: '武器与抽卡', lines: ['英雄页新增「武器」按钮，可装备/卸下（目前开放弓手）', '主界面新增「背包」与「抽武器」', '品质白→绿→蓝→紫→红，三个同阶合一阶，两个同星红合高一星', '抽卡 60 钻/次：白80% 绿10% 蓝6% 紫3% 红1%，带翻卡动画'] },
     { ver: 'v0.5.5', title: '战斗手感与设置', lines: ['暴击伤害数字更大更红', '17-20 波敌人更硬，关卡之间落差更明显', '清波提示分两行显示', '修复拖拽同名同级英雄无法合成', '新增设置：特效强度滑条（主界面右下角 ⚙️ / 暂停菜单）'] },
     { ver: 'v0.5.4', title: '界面排版整理', lines: ['英雄页：升级/选择改为右侧上下排列，不再压住 Lv 加成说明', '英雄页支持上下拖动滚动，矮屏也能看到全部主角', '局内顶栏去掉钻石（回主界面看），只留局内金币；左侧战绩与英雄数不再重叠', '附加技能栏改为居中显示'] },
@@ -728,7 +738,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.9';
+  D.VERSION = 'v0.5.10';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -4261,9 +4271,14 @@ var G = require('../boot.js');
           ctx.lineWidth = 3;
           if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gx + 1.5, gy + 1.5, cw - 3, chh - 3, Math.min(14, cw * 0.16)); ctx.stroke(); }
         }
-        UI.reg('wsel_' + w.uid, gx, gy, cw, chh, (function (uid) {
-          return function () { game.selectWeapon(uid); };
-        })(w.uid));
+        // 命中区裁到可见范围内：滚动到顶栏下面（被裁掉）的部分不再可点
+        var vy0 = Math.max(gy, top);
+        var vy1 = Math.min(gy + chh, H - bottomBar);
+        if (vy1 - vy0 > 10) {
+          UI.reg('wsel_' + w.uid, gx, vy0, cw, vy1 - vy0, (function (uid) {
+            return function () { game.selectWeapon(uid); };
+          })(w.uid));
+        }
       }
       ctx.restore();
 
@@ -4345,25 +4360,33 @@ var G = require('../boot.js');
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.fillText('当前仅开放弓手武器', tx0, by + 66);
 
-      // 概率（按实测宽度顺排，不挤在一起）
-      var shown = [['白', 80], ['绿', 10], ['蓝', 6], ['紫', 3], ['红', 1]];
-      var ryy = by + 96;
-      var rx = tx0;
+      // 概率：固定两行（白绿蓝 / 紫红），任何宽度都不会顶出卡片
+      var rateRows = [
+        [[0, '白', 80], [1, '绿', 10], [2, '蓝', 6]],
+        [[3, '紫', 3], [4, '红', 1]]
+      ];
+      var ryy = by + 94;
       ctx.font = '10px sans-serif';
-      for (var i = 0; i < shown.length; i++) {
-        var T = G.Weapon.TIERS[i];
-        ctx.fillStyle = T.color;
-        ctx.beginPath(); ctx.arc(rx + 4, ryy - 3.5, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.8)';
-        var lbl = shown[i][0] + shown[i][1] + '%';
-        ctx.fillText(lbl, rx + 11, ryy);
-        rx += 11 + ctx.measureText(lbl).width + 12;
+      for (var r = 0; r < rateRows.length; r++) {
+        var rx = tx0;
+        for (var i = 0; i < rateRows[r].length; i++) {
+          var item = rateRows[r][i];
+          var T = G.Weapon.TIERS[item[0]];
+          var lbl = item[1] + item[2] + '%';
+          ctx.fillStyle = T.color;
+          ctx.beginPath(); ctx.arc(rx + 4, ryy - 3.5, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.fillText(lbl, rx + 11, ryy);
+          rx += 11 + ctx.measureText(lbl).width + 14;
+        }
+        ryy += 18;
       }
+      var hintY = ryy + 2;
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.fillText('紫 / 红品质抽到时会有光晕', tx0, by + 120);
+      ctx.fillText('紫 / 红品质抽到时会有光晕', tx0, hintY);
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillText('1 抽 ' + 60 + ' 钻 · 10 抽 ' + 600 + ' 钻', tx0, by + 140);
+      ctx.fillText('1 抽 60 钻 · 10 抽 600 钻', tx0, hintY + 18);
 
       // 规则说明
       var ry = by + bh2 + 14;
@@ -4424,7 +4447,7 @@ var G = require('../boot.js');
       var gridH = rows * chh + (rows - 1) * gap;
       var y0 = H * 0.46 - gridH / 2;
 
-      var FLY = 0.36, HOLD_END = 0.5, FLIP = 0.22;
+      var FLY = 0.36;
       var allDone = true;
 
       for (var i = 0; i < n; i++) {
@@ -4432,6 +4455,11 @@ var G = require('../boot.js');
         var delay = n > 1 ? i * 0.075 : 0;
         var ct = t - delay;
         if (ct < 0) { allDone = false; continue; }
+
+        // 稀有（紫/红）翻牌慢放 + 音效，其余品质正常速度
+        var isRare = w.tier >= 3;
+        var HOLD_END = isRare ? 0.62 : 0.5;
+        var FLIP = isRare ? 0.8 : 0.22;
 
         var cx = x0 + (i % cols) * (cw + gap) + cw / 2;
         var cy = y0 + Math.floor(i / cols) * (chh + gap) + chh / 2;
@@ -4449,6 +4477,12 @@ var G = require('../boot.js');
           sc = 1 + 0.07 * Math.sin(b * Math.PI);   // 落定微弹
         }
 
+        // 翻牌音效：稀有在起手时给一记长音，普通是轻脆的一声
+        if (ct >= HOLD_END && game.gacha.sfx && !game.gacha.sfx[i]) {
+          game.gacha.sfx[i] = 1;
+          G.Audio.play(isRare ? (w.tier >= 4 ? 'rarebig' : 'rare') : 'flip');
+        }
+
         var revealed = ct >= HOLD_END + FLIP;
         var flipK = 1;
         if (ct >= HOLD_END && ct < HOLD_END + FLIP) {
@@ -4462,14 +4496,15 @@ var G = require('../boot.js');
         }
 
         var T = G.Weapon.tierOf(w);
-        // 稀有品质光晕（紫/红）
-        if (revealed && w.tier >= 3) {
+        // 稀有品质光晕（紫/红）：翻牌过程中逐渐亮起，翻完常亮脉冲
+        if (w.tier >= 3 && ct >= HOLD_END) {
+          var gk = Math.min(1, (ct - HOLD_END) / (FLIP * 0.85));
           var pulse = 0.6 + 0.4 * Math.sin(now / 280 + i * 0.7);
           var rg = ctx.createRadialGradient(px, py, cw * 0.22, px, py, cw * 1.35);
           rg.addColorStop(0, T.glow);
           rg.addColorStop(0.4, T.glow.replace(/[\d.]+\)$/, '0.32)'));
           rg.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.globalAlpha = 0.45 + 0.4 * pulse;
+          ctx.globalAlpha = (0.2 + 0.65 * gk) * (0.65 + 0.35 * pulse);
           ctx.fillStyle = rg;
           ctx.beginPath(); ctx.arc(px, py, cw * 1.35, 0, Math.PI * 2); ctx.fill();
           ctx.globalAlpha = 1;
@@ -5088,7 +5123,7 @@ var G = require('./boot.js');
       G.Meta.diamonds -= cost;
       G.Meta.save();
       var cards = G.Weapon.draw(n >= 10 ? 10 : 1, 'archer');
-      Game.gacha = { cards: cards, start: Date.now(), cost: cost };
+      Game.gacha = { cards: cards, start: Date.now(), cost: cost, sfx: {} };
       G.Audio.play('coin');
     },
     skipGacha: function () {

@@ -78,6 +78,16 @@ var G = require('../boot.js');
         case 'button': Audio.tone(700, 500, 0.05, 0.05, 'square'); break;
         case 'error': Audio.tone(200, 150, 0.12, 0.08, 'square'); break;
         case 'crystal': Audio.tone(900, 300, 0.25, 0.15, 'sawtooth'); break;
+        case 'flip': Audio.tone(880, 1320, 0.06, 0.05, 'triangle'); break;
+        case 'rare':   // 紫：一段上行琶音 + 一点沙沙
+          Audio.noise(0.22, 0.05);
+          [784, 988, 1175, 1568].forEach(function (f, i) { Audio.tone(f, f, 0.22, 0.07, 'sine', i * 0.07); });
+          break;
+        case 'rarebig':   // 红：更长更亮，配一个低频轰鸣
+          Audio.noise(0.35, 0.09);
+          [523, 659, 784, 1047, 1319, 1568].forEach(function (f, i) { Audio.tone(f, f, 0.3, 0.075, 'sine', i * 0.085); });
+          Audio.tone(140, 55, 0.5, 0.1, 'sawtooth', 0.05);
+          break;
         case 'gameover': [400, 330, 262, 196].forEach(function (f, i) { Audio.tone(f, f * 0.9, 0.3, 0.1, 'sine', i * 0.22); }); break;
       }
     }
