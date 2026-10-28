@@ -526,7 +526,7 @@ var G = require('../boot.js');
 
   // 波次成长
   D.WAVE = {
-    START_INTERVAL: 3,     // 波与波之间的间歇
+    START_INTERVAL: 5,     // 波与波之间的间歇
     HP_GROWTH: 1.13,       // 前期每波 HP ×1.13（13波起按阶梯加速，见 HP_GROWTH_TIERS）
     HP_GROWTH_TIERS: [     // 血量阶梯式成长：对标玩家输出曲线，后期压迫感增强
       { from: 1, rate: 1.13 },
@@ -701,6 +701,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.13', title: 'HUD 调整', lines: ['波次倒计时移到屏幕上方，字号放大一倍，不再挡住左上战绩', '波次间隔改为 5 秒', '左上角新增当前主角 DPS 秒伤'] },
     { ver: 'v0.5.12', title: '武器战斗效果', lines: ['五档品质各有独立效果：穿透、冰霜冻结、暗影分裂、炎爆灼烧', '红色按星级进阶：2★灼烧强化 3★火焰轨迹 4★双重炎爆+图腾 5★焚天箭雨', '武器属性改为真实加成（攻击/攻速/暴击率/暴击伤害/射程）'] },
     { ver: 'v0.5.11', title: '英雄不再持械', lines: ['招募来的英雄只显示职业图标，不再跟着拿当前装备的武器', '装备的武器只显示在玩家操控的主角身上'] },
     { ver: 'v0.5.10', title: '抽卡与背包手感', lines: ['卡池概率改成两行显示，不再顶出卡片', '抽到紫/红品质时翻牌慢放 + 音效', '武器列表滚动后，顶栏区域不再误点到下面的武器'] },
@@ -740,7 +741,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.12';
+  D.VERSION = 'v0.5.13';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -2267,6 +2268,11 @@ var G = require('../boot.js');
     // 主角面板 DPS（含暴击期望，不含多弹道），Boss/精英血量定价基准
     dps: function () {
       return Player.attack() * (1 + (Player.stats.crit || 0) * 0.08) / Player.interval();
+    },
+    // HUD 显示用的真实秒伤：含武器暴击率与暴击伤害
+    dpsShow: function () {
+      var cr = Player.critRate(), cm = Player.critMult();
+      return Player.attack() * (1 + cr * (cm - 1)) / Player.interval();
     },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
 
@@ -3941,6 +3947,12 @@ var G = require('../boot.js');
         segX += 17 + ctx.measureText(segs[sg].val).width + segGap;
       }
 
+      // 主角 DPS（左上，紧贴战绩行下方；与 Boss 血条在纵向错开，不会互相压）
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
+
       // 关卡与波次（中）
       ctx.textAlign = 'center';
       ctx.font = 'bold 13px sans-serif';
@@ -3948,9 +3960,15 @@ var G = require('../boot.js');
       ctx.fillText('第 ' + game.currentLevel + ' 关 · ' + Math.max(1, G.Waves.wave) + '/' + D.LEVELS.WAVES + ' 波', W / 2, 30);
       var lbl = G.Waves.label();
       if (lbl) {
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = lbl.boss ? '#ff6b6b' : 'rgba(255,255,255,0.7)';
-        ctx.fillText(lbl.boss ? '⚠ BOSS 波即将来袭' : lbl.txt, W / 2, 47);
+        // 波次倒计时：从 HUD 里挪出来，单独画在屏幕上方 1/5 处，字号放大 2 倍
+        var cdTxt = lbl.boss ? '⚠ BOSS 波 ' + Math.ceil(G.Waves.timer) + 's' : lbl.txt;
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = 5;
+        ctx.strokeText(cdTxt, W / 2, H * 0.2);
+        ctx.fillStyle = lbl.boss ? '#ff6b6b' : '#ffd166';
+        ctx.fillText(cdTxt, W / 2, H * 0.2);
       }
 
       // 右上资源栏：只显示局内金币（钻石是局外资源，回主界面才展示）

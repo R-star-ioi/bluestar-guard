@@ -116,6 +116,12 @@ var G = require('../boot.js');
         segX += 17 + ctx.measureText(segs[sg].val).width + segGap;
       }
 
+      // 主角 DPS（左上，紧贴战绩行下方；与 Boss 血条在纵向错开，不会互相压）
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
+
       // 关卡与波次（中）
       ctx.textAlign = 'center';
       ctx.font = 'bold 13px sans-serif';
@@ -123,9 +129,15 @@ var G = require('../boot.js');
       ctx.fillText('第 ' + game.currentLevel + ' 关 · ' + Math.max(1, G.Waves.wave) + '/' + D.LEVELS.WAVES + ' 波', W / 2, 30);
       var lbl = G.Waves.label();
       if (lbl) {
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = lbl.boss ? '#ff6b6b' : 'rgba(255,255,255,0.7)';
-        ctx.fillText(lbl.boss ? '⚠ BOSS 波即将来袭' : lbl.txt, W / 2, 47);
+        // 波次倒计时：从 HUD 里挪出来，单独画在屏幕上方 1/5 处，字号放大 2 倍
+        var cdTxt = lbl.boss ? '⚠ BOSS 波 ' + Math.ceil(G.Waves.timer) + 's' : lbl.txt;
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = 5;
+        ctx.strokeText(cdTxt, W / 2, H * 0.2);
+        ctx.fillStyle = lbl.boss ? '#ff6b6b' : '#ffd166';
+        ctx.fillText(cdTxt, W / 2, H * 0.2);
       }
 
       // 右上资源栏：只显示局内金币（钻石是局外资源，回主界面才展示）

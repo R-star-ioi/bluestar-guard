@@ -58,6 +58,11 @@ var G = require('../boot.js');
     dps: function () {
       return Player.attack() * (1 + (Player.stats.crit || 0) * 0.08) / Player.interval();
     },
+    // HUD 显示用的真实秒伤：含武器暴击率与暴击伤害
+    dpsShow: function () {
+      var cr = Player.critRate(), cm = Player.critMult();
+      return Player.attack() * (1 + cr * (cm - 1)) / Player.interval();
+    },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
 
     update: function (dt, game) {
