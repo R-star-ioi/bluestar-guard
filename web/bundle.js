@@ -596,7 +596,8 @@ var G = require('../boot.js');
     SEG_COUNT: 72,         // 体节数
     SEG_R: 32,             // 体节半径（≈基地大小，玩家 r14 的 5 倍直径量级）
     SEG_SPACING: 40,       // 节间距（轻微重叠，视觉连贯）
-    SPEED_RATIO: 0.5,      // 速度 = 玩家速度 × 0.5
+    SPEED_RATIO: 0.35,     // 普通移动 = 玩家速度 × 0.35
+    DASH_SPEED_RATIO: 0.9, // 冲撞时 = 玩家速度 × 0.9
     DASH_DMG: 55,          // 冲撞
     SPIT_DMG: 15,          // 魔唾液命中
     POOL_DMG: 10,          // 魔唾液落地的酸液
@@ -760,6 +761,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.18', title: '爆弹防秒杀 + 吞噬者再减速', lines: ['崩解爆弹对 Boss / 世界吞噬者：单次爆炸伤害不超过其最大血量的 15%，无法再被连环秒杀', '吞噬者普通移速降为玩家的 35%，冲撞时为玩家的 90%'] },
     { ver: 'v0.5.17', title: '吞噬者减速', lines: ['世界吞噬者移速降为玩家速度的 50%，走位空间更大'] },
     { ver: 'v0.5.16', title: '吞噬者调优 + 开发者码', lines: ['吞噬者体型加大到接近基地大小（体节半径 32，约为玩家 5 倍身位）', '新增开发者兑换码：游戏中暂停后输入可跳到第 19 波（可重复使用）', '受击闪白改为淡色，不再整条发白'] },
     { ver: 'v0.5.15', title: '世界吞噬者', lines: ['第 20 波关底 Boss 换成蠕虫「世界吞噬者」：72 体节，打碎一节就分裂成多条', '它存活期间循环播放专属 BGM（60% 音量）', '会冲撞与喷吐魔唾液，命中会禁疗 / 减速 / 易伤', '受到的所有伤害 -20%，爆炸类再 -80%，请别指望炎爆速刷'] },
@@ -807,7 +809,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.17';
+  D.VERSION = 'v0.5.18';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -2721,7 +2723,13 @@ var G = require('../boot.js');
         seen[e.x + '_' + e.y] = 1;
         var rr = r + e.r;
         if (U.dist2(x, y, e.x, e.y) <= rr * rr) {
-          game.damageEnemy(e, dmg, x, y, true);
+          // Boss（含世界吞噬者体节）：单次爆炸伤害上限 = 其最大血量 15%，防无限连锁秒杀
+          var bd = dmg;
+          if (e.boss || e.isWorm) {
+            var cap = e.maxHp * 0.15;
+            if (bd > cap) bd = cap;
+          }
+          game.damageEnemy(e, bd, x, y, true, { aoe: true });
           if (isShield && !e.dead) {
             var kd = Math.sqrt(U.dist2(x, y, e.x, e.y)) || 1;
             e.kbX = (e.x - x) / kd * 260;
@@ -3642,7 +3650,7 @@ var G = require('../boot.js');
 
         if (w.dashing > 0) {
           w.dashing -= dt;
-          spd = baseSpeed * 2.6;
+          spd = pl.speed() * D.DEVOURER.DASH_SPEED_RATIO;   // 冲撞：玩家速度的 90%
           head.x += w.dashDir.x * spd * dt;
           head.y += w.dashDir.y * spd * dt;
           head.x = U.clamp(head.x, 10, D.MAP_W - 10);

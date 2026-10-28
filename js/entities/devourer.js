@@ -158,7 +158,7 @@ var G = require('../boot.js');
 
         if (w.dashing > 0) {
           w.dashing -= dt;
-          spd = baseSpeed * 2.6;
+          spd = pl.speed() * D.DEVOURER.DASH_SPEED_RATIO;   // 冲撞：玩家速度的 90%
           head.x += w.dashDir.x * spd * dt;
           head.y += w.dashDir.y * spd * dt;
           head.x = U.clamp(head.x, 10, D.MAP_W - 10);
