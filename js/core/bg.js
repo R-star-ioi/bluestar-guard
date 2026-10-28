@@ -117,6 +117,31 @@ var G = require('../boot.js');
         ctx.fillStyle = base.hp / base.maxHp > 0.4 ? '#4aa3ff' : '#ff4757';
         ctx.fillRect(sx - w / 2 + 1, y0 + 1, (w - 2) * Math.max(0, base.hp / base.maxHp), 5);
       }
+
+      // 世界吞噬者战：基地保护罩（无敌，青色能量穹顶）
+      var dv = G.Devourer;
+      if (dv && dv.active) {
+        var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+        var pr = base.r + 30 + Math.sin(t * 3) * 3;
+        var sg = ctx.createRadialGradient(sx, sy, pr * 0.35, sx, sy, pr);
+        sg.addColorStop(0, 'rgba(126,249,255,0)');
+        sg.addColorStop(0.75, 'rgba(126,249,255,' + (0.10 * fa) + ')');
+        sg.addColorStop(1, 'rgba(126,249,255,' + (0.34 * fa) + ')');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(sx, sy, pr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(126,249,255,' + (0.55 + 0.25 * Math.sin(t * 4)) * fa + ')';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, pr, 0, Math.PI * 2);
+        ctx.stroke();
+        // 罩顶标记
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(126,249,255,0.9)';
+        ctx.fillText('护盾中', sx, sy - pr - 8);
+      }
     }
   };
   G.Bg = Bg;

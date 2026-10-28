@@ -251,8 +251,11 @@ var G = require('./boot.js');
     damageBase: function (dmg) {
       var b = Game.base;
       if (!b || b.hp <= 0) return;
-      // 世界吞噬者存活期间：基地每次受击只扣 1hp（专心走位躲 Boss，不用兼顾基地）
-      if (G.Devourer && G.Devourer.active) dmg = 1;
+      // 世界吞噬者存活期间：基地被保护罩罩住，完全无敌（专心走位躲 Boss）
+      if (G.Devourer && G.Devourer.active) {
+        G.FX.text(b.x, b.y - b.r - 30, '护盾吸收', '#7ef9ff', 11);
+        return;
+      }
       b.hp -= dmg;
       G.Audio.play('crystal');
       G.Camera.shake(3, 0.15);

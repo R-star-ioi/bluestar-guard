@@ -761,6 +761,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.20', title: '吞噬者战基地无敌', lines: ['世界吞噬者存活期间基地被保护罩罩住：完全无敌（青色能量罩可视化），Boss 战专心走位'] },
     { ver: 'v0.5.19', title: '吞噬者战保护基地', lines: ['世界吞噬者存活期间，基地每次受击只扣 1hp，安心走位躲 Boss'] },
     { ver: 'v0.5.18', title: '爆弹防秒杀 + 吞噬者再减速', lines: ['崩解爆弹对 Boss / 世界吞噬者：单次爆炸伤害不超过其最大血量的 15%，无法再被连环秒杀', '吞噬者普通移速降为玩家的 35%，冲撞时为玩家的 90%'] },
     { ver: 'v0.5.17', title: '吞噬者减速', lines: ['世界吞噬者移速降为玩家速度的 50%，走位空间更大'] },
@@ -810,7 +811,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.19';
+  D.VERSION = 'v0.5.20';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -1780,6 +1781,31 @@ var G = require('../boot.js');
         ctx.fillRect(sx - w / 2, y0, w, 7);
         ctx.fillStyle = base.hp / base.maxHp > 0.4 ? '#4aa3ff' : '#ff4757';
         ctx.fillRect(sx - w / 2 + 1, y0 + 1, (w - 2) * Math.max(0, base.hp / base.maxHp), 5);
+      }
+
+      // 世界吞噬者战：基地保护罩（无敌，青色能量穹顶）
+      var dv = G.Devourer;
+      if (dv && dv.active) {
+        var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+        var pr = base.r + 30 + Math.sin(t * 3) * 3;
+        var sg = ctx.createRadialGradient(sx, sy, pr * 0.35, sx, sy, pr);
+        sg.addColorStop(0, 'rgba(126,249,255,0)');
+        sg.addColorStop(0.75, 'rgba(126,249,255,' + (0.10 * fa) + ')');
+        sg.addColorStop(1, 'rgba(126,249,255,' + (0.34 * fa) + ')');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(sx, sy, pr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(126,249,255,' + (0.55 + 0.25 * Math.sin(t * 4)) * fa + ')';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, pr, 0, Math.PI * 2);
+        ctx.stroke();
+        // 罩顶标记
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(126,249,255,0.9)';
+        ctx.fillText('护盾中', sx, sy - pr - 8);
       }
     }
   };
@@ -6437,8 +6463,11 @@ var G = require('./boot.js');
     damageBase: function (dmg) {
       var b = Game.base;
       if (!b || b.hp <= 0) return;
-      // 世界吞噬者存活期间：基地每次受击只扣 1hp（专心走位躲 Boss，不用兼顾基地）
-      if (G.Devourer && G.Devourer.active) dmg = 1;
+      // 世界吞噬者存活期间：基地被保护罩罩住，完全无敌（专心走位躲 Boss）
+      if (G.Devourer && G.Devourer.active) {
+        G.FX.text(b.x, b.y - b.r - 30, '护盾吸收', '#7ef9ff', 11);
+        return;
+      }
       b.hp -= dmg;
       G.Audio.play('crystal');
       G.Camera.shake(3, 0.15);
