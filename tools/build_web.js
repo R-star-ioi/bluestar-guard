@@ -13,6 +13,7 @@ var FILES = [
   'js/core/audio.js',
   'js/config/data.js',
   'js/core/meta.js',
+  'js/core/weapon.js',
   'js/core/bg.js',
   'js/entities/fx.js',
   'js/entities/pickup.js',

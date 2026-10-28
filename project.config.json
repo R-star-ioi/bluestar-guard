@@ -16,6 +16,8 @@
     "ignore": [
       { "type": "folder", "value": "docs" },
       { "type": "folder", "value": "web" },
+      { "type": "folder", "value": "tools" },
+      { "type": "folder", "value": "弓手武器" },
       { "type": "file", "value": "index.html" },
       { "type": "file", "value": "README.md" }
     ]

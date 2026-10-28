@@ -22,10 +22,17 @@ var G = require('./boot.js');
     skillPickOptions: [],
     currentLevel: 1,
     victory: null,
+    weaponCls: null,     // 武器页当前职业（null = 背包看全部）
+    weaponSel: 0,        // 选中的武器 uid
+    weaponScroll: 0,
+    weaponBack: 'menu',
+    gacha: null,         // 抽卡结果动画状态
 
     init: function () {
       G.Input.init();
       G.Meta.load();
+      // 预载武器图，避免第一次打开武器页/抽卡时闪白
+      if (G.Weapon) { for (var ti = 0; ti <= 4; ti++) G.Weapon.img('archer', ti); }
       Game.best = G.P.storage.get('lx_best', { lv: 1, wv: 0 });
       if (Game.best.wave !== undefined) { Game.best = { lv: 1, wv: 0 }; }
       var snd = G.P.storage.get('lx_sound', 1);
@@ -97,6 +104,76 @@ var G = require('./boot.js');
 
     toast: function (text) {
       Game.showMsg(text, '#7bed9f', 1.4);
+      G.Audio.play('button');
+    },
+
+    // ============ 武器 / 抽卡 ============
+    openWeapons: function (cls) {
+      G.Audio.play('button');
+      Game.weaponCls = cls || null;
+      Game.weaponBack = 'heroes';
+      Game.weaponSel = 0;
+      Game.weaponScroll = 0;
+      Game.setState('weapons');
+    },
+    openBag: function () {
+      G.Audio.play('button');
+      Game.weaponCls = null;
+      Game.weaponBack = 'menu';
+      Game.weaponSel = 0;
+      Game.weaponScroll = 0;
+      Game.setState('bag');
+    },
+    openGacha: function () {
+      G.Audio.play('button');
+      Game.gacha = null;
+      Game.setState('gacha');
+    },
+    selectWeapon: function (uid) {
+      Game.weaponSel = (Game.weaponSel === uid) ? 0 : uid;
+      G.Audio.play('button');
+    },
+    equipWeapon: function (w) {
+      if (!w) return;
+      G.Weapon.equip(w);
+      G.Audio.play('upgrade');
+      Game.toast('已装备 ' + G.Weapon.label(w));
+    },
+    unequipWeapon: function (cls) {
+      G.Weapon.unequip(cls);
+      G.Audio.play('button');
+      Game.toast('已卸下武器');
+    },
+    mergeWeapons: function () {
+      var res = G.Weapon.mergeAll();
+      if (!res.length) {
+        G.Audio.play('error');
+        Game.toast('没有可以合成的武器');
+        return;
+      }
+      var last = res[res.length - 1];
+      G.Audio.play('merge');
+      Game.toast('合成 ' + res.length + ' 次 · 最高 ' + G.Weapon.TIERS[last.toTier].name + last.toStar + '★');
+      Game.weaponSel = 0;
+    },
+    doGacha: function (n) {
+      var cost = (n >= 10) ? 600 : 60;
+      if (G.Meta.diamonds < cost) {
+        G.Audio.play('error');
+        Game.toast('钻石不足，去通关开宝箱');
+        return;
+      }
+      G.Meta.diamonds -= cost;
+      G.Meta.save();
+      var cards = G.Weapon.draw(n >= 10 ? 10 : 1, 'archer');
+      Game.gacha = { cards: cards, start: Date.now(), cost: cost };
+      G.Audio.play('coin');
+    },
+    skipGacha: function () {
+      if (Game.gacha) Game.gacha.start -= 4000;   // 快进到全部翻完
+    },
+    closeGacha: function () {
+      Game.gacha = null;
       G.Audio.play('button');
     },
 
@@ -336,6 +413,11 @@ var G = require('./boot.js');
         Game.heroDrag = { id: id, y0: y, base: Game.heroScroll || 0 };
         return;
       }
+      // 武器页 / 背包：同上，拖空白处滚动网格
+      if (Game.state === 'weapons' || Game.state === 'bag') {
+        Game.weaponDrag = { id: id, y0: y, base: Game.weaponScroll || 0 };
+        return;
+      }
       if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'changelog' || Game.state === 'gameover' || Game.state === 'paused') return;
       // 去重：部分环境同一指针的 start 会双发，80ms 内忽略重复
       var now = Date.now();
@@ -377,6 +459,13 @@ var G = require('./boot.js');
         Game.heroScroll = Math.max(0, hd.base + (hd.y0 - y));
         return;
       }
+      // 武器页 / 背包
+      if (Game.state === 'weapons' || Game.state === 'bag') {
+        var wd = Game.weaponDrag;
+        if (!wd || wd.id !== id) return;
+        Game.weaponScroll = Math.max(0, wd.base + (wd.y0 - y));
+        return;
+      }
       if (Game.state !== 'playing') return;
       // 摇杆
       if (Game.joyId === id) {
@@ -406,6 +495,10 @@ var G = require('./boot.js');
       }
       if (Game.state === 'heroes') {
         if (Game.heroDrag && Game.heroDrag.id === id) Game.heroDrag = null;
+        return;
+      }
+      if (Game.state === 'weapons' || Game.state === 'bag') {
+        if (Game.weaponDrag && Game.weaponDrag.id === id) Game.weaponDrag = null;
         return;
       }
       if (Game.joyId === id) {
@@ -489,7 +582,8 @@ var G = require('./boot.js');
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
       var uiOnly = (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' ||
-        Game.state === 'changelog' || Game.state === 'victory' ||
+        Game.state === 'changelog' || Game.state === 'victory' || Game.state === 'weapons' ||
+        Game.state === 'bag' || Game.state === 'gacha' ||
         (Game.state === 'settings' && Game.settingsBack !== 'paused'));
       if (uiOnly) {
         // 菜单/英雄/结算只画背景层

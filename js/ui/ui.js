@@ -52,11 +52,20 @@ var G = require('../boot.js');
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
       if (sub) {
-        ctx.font = 'bold 14px sans-serif';
-        ctx.fillText(label, x + w / 2, y + 20);
-        ctx.font = '11px sans-serif';
-        ctx.fillStyle = sub.indexOf('金') >= 0 ? '#ffe082' : 'rgba(255,255,255,0.85)';
-        ctx.fillText(sub, x + w / 2, y + 37);
+        if (h >= 44) {
+          ctx.font = 'bold 14px sans-serif';
+          ctx.fillText(label, x + w / 2, y + 20);
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = sub.indexOf('金') >= 0 ? '#ffe082' : 'rgba(255,255,255,0.85)';
+          ctx.fillText(sub, x + w / 2, y + 37);
+        } else {
+          // 紧凑按钮（34px 高，英雄页三连按钮用）
+          ctx.font = 'bold 12px sans-serif';
+          ctx.fillText(label, x + w / 2, y + 14);
+          ctx.font = '9px sans-serif';
+          ctx.fillStyle = sub.indexOf('金') >= 0 ? '#ffe082' : 'rgba(255,255,255,0.85)';
+          ctx.fillText(sub, x + w / 2, y + 27);
+        }
       } else {
         ctx.font = 'bold 15px sans-serif';
         ctx.fillText(label, x + w / 2, y + h / 2 + 5);
@@ -214,7 +223,7 @@ var G = require('../boot.js');
     },
 
     // 波次开场横幅 / 消息（支持 '\n' 换行，多行时整体居中）
-    drawAnnounce: function (ctx, game) {
+    drawAnnounce: function (ctx, game, yPct) {
       if (!game.msg || game.msg.t <= 0) return;
       var W = G.P.screenW, H = G.P.screenH;
       var k = game.msg.t / game.msg.life;
@@ -223,7 +232,8 @@ var G = require('../boot.js');
       ctx.textAlign = 'center';
       var lines = String(game.msg.text).split('\n');
       var lh = lines.length > 1 ? 32 : 0;
-      var startY = H * 0.32 - (lines.length - 1) * lh / 2;
+      var baseY = H * (yPct || 0.32);
+      var startY = baseY - (lines.length - 1) * lh / 2;
       for (var i = 0; i < lines.length; i++) {
         var isTitle = i === 0;
         ctx.font = isTitle ? 'bold 26px sans-serif' : 'bold 19px sans-serif';
@@ -615,10 +625,21 @@ var G = require('../boot.js');
       UI.button(ctx, 'start', W / 2 - 100, startY, 200, 56, locked ? '🔒 未解锁' : '▶ 开始挑战', locked ? '先通关第 ' + G.Meta.maxLevel + ' 关' : ('第 ' + lv + ' 关 · ' + lvName), '#2d6cdf', function () {
         game.startRun(G.Meta.selectedLevel);
       }, locked);
-      // 英雄按钮（局外成长）
-      UI.button(ctx, 'heroes', W / 2 - 100, startY + 66 * gs, 200, 50, '🦸 英雄', '选择与升级主角', '#8e44ad', function () {
+      // 英雄 / 背包 / 抽武器（三连，等宽不越界）
+      var mgap = 8;
+      var mw = Math.min(118, (W - 40 - mgap * 2) / 3);
+      var mtotal = mw * 3 + mgap * 2;
+      var mx0 = (W - mtotal) / 2;
+      var mrowY = startY + 66 * gs;
+      UI.button(ctx, 'heroes', mx0, mrowY, mw, 50, '🦸 英雄', '选择/升级', '#8e44ad', function () {
         G.Audio.play('button');
         game.setState('heroes');
+      });
+      UI.button(ctx, 'bag', mx0 + mw + mgap, mrowY, mw, 50, '📦 背包', '武器', 'rgba(90,100,140,1)', function () {
+        game.openBag();
+      });
+      UI.button(ctx, 'gacha', mx0 + (mw + mgap) * 2, mrowY, mw, 50, '🎁 抽武器', '60钻/抽', '#c0392b', function () {
+        game.openGacha();
       });
       // 当前主角 + 升级金币 + 纪录（合并两行，避免与说明重叠）
       var sel = G.Meta.protoStats(G.Meta.selected);
@@ -733,8 +754,8 @@ var G = require('../boot.js');
           else ctx.fillRect(x, y, cw, ch);
         }
 
-        // 右侧操作列（升级在上、选择在下，不再压住说明文字）
-        var bw2 = 92, bh2 = 40;
+        // 右侧操作列（升级 / 武器 / 选择，竖排三连，全部落在卡片内）
+        var bw2 = 92, bh2 = 34;
         var bx2 = x + cw - bw2 - 14;
         var txW = Math.max(80, bx2 - (x + 62) - 12);
 
@@ -781,10 +802,10 @@ var G = require('../boot.js');
             };
           })(cls), G.Meta.gold < uc);
         } else {
-          // 升级（在上）
+          // 升级
           var maxed = lv >= D.META.MAX_LV;
           var upCost = G.Meta.upgradeCost(cls);
-          UI.button(ctx, 'mup_' + cls, bx2, y + 24, bw2, bh2, '升级',
+          UI.button(ctx, 'mup_' + cls, bx2, y + 12, bw2, bh2, '升级',
             maxed ? '已满级' : '💰' + upCost, '#27ae60',
             (function (c) {
               return function () {
@@ -792,14 +813,21 @@ var G = require('../boot.js');
                 else game.toast('升级金币不足');
               };
             })(cls), maxed || G.Meta.gold < upCost);
-          // 选择（在下）
+          // 武器（升级与选择中间）
+          var eqw = G.Weapon ? G.Weapon.equipped(cls) : null;
+          UI.button(ctx, 'wep_' + cls, bx2, y + 52, bw2, bh2, '武器',
+            eqw ? G.Weapon.label(eqw) : '未装备', '#8e5bd0',
+            (function (c) {
+              return function () { game.openWeapons(c); };
+            })(cls));
+          // 选择 / 使用中
           if (selected) {
             ctx.textAlign = 'center';
             ctx.font = 'bold 13px sans-serif';
             ctx.fillStyle = '#ffd166';
-            ctx.fillText('✓ 使用中', bx2 + bw2 / 2, y + 24 + bh2 + 34);
+            ctx.fillText('✓ 使用中', bx2 + bw2 / 2, y + 92 + bh2 / 2 + 4);
           } else {
-            UI.button(ctx, 'sel_' + cls, bx2, y + 78, bw2, bh2, '选择', null, '#2d6cdf', (function (c) {
+            UI.button(ctx, 'sel_' + cls, bx2, y + 92, bw2, bh2, '选择', null, '#2d6cdf', (function (c) {
               return function () { G.Meta.select(c); };
             })(cls));
           }
@@ -814,6 +842,432 @@ var G = require('../boot.js');
         var thumbY = trackY + (trackH - thumbH) * (sy / maxScroll);
         UI.pill(ctx, W - 5, thumbY, 3, thumbH, 'rgba(130,170,255,0.45)', 2);
       }
+    },
+
+    // ================= 武器：卡面 / 列表 / 抽卡 =================
+    drawStar: function (ctx, cx, cy, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (var i = 0; i < 10; i++) {
+        var ang = -Math.PI / 2 + i * Math.PI / 5;
+        var rad = (i % 2 === 0) ? r : r * 0.45;
+        var px = cx + Math.cos(ang) * rad, py = cy + Math.sin(ang) * rad;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    },
+
+    // 卡背（抽卡未翻开时）
+    drawCardBack: function (ctx, x, y, w, h) {
+      var r = Math.min(14, w * 0.16);
+      var g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, '#2a3a6e');
+      g.addColorStop(0.5, '#16204a');
+      g.addColorStop(1, '#2a3a6e');
+      ctx.fillStyle = g;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+      else ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(143,211,255,0.75)';
+      ctx.lineWidth = 2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x + 1, y + 1, w - 2, h - 2, r); ctx.stroke(); }
+      // 中央菱形纹
+      ctx.strokeStyle = 'rgba(143,211,255,0.45)';
+      ctx.lineWidth = 1.5;
+      var cx = x + w / 2, cy = y + h / 2, d = Math.min(w, h) * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - d); ctx.lineTo(cx + d * 0.7, cy);
+      ctx.lineTo(cx, cy + d); ctx.lineTo(cx - d * 0.7, cy);
+      ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, d * 1.5, 0, Math.PI * 2); ctx.stroke();
+    },
+
+    // 武器卡：品质底 + 图 + 边框 + 星级
+    drawWeaponCard: function (ctx, x, y, w, h, cls, tier, star, opts) {
+      opts = opts || {};
+      var T = G.Weapon.TIERS[tier] || G.Weapon.TIERS[0];
+      var r = Math.min(14, w * 0.16);
+      var g = ctx.createLinearGradient(x, y, x, y + h);
+      g.addColorStop(0, T.deep);
+      g.addColorStop(0.5, 'rgba(12,18,40,0.94)');
+      g.addColorStop(1, 'rgba(6,10,22,0.97)');
+      ctx.fillStyle = g;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+      else ctx.fillRect(x, y, w, h);
+
+      var pad = Math.max(4, w * 0.07);
+      var starsH = 14;
+      var iw = w - pad * 2, ih = h - pad * 2 - starsH;
+      var side = Math.max(18, Math.min(iw, ih));
+      var ix = x + (w - side) / 2, iy = y + pad + (ih - side) / 2;
+      var rec = G.Weapon.img(cls, tier);
+      ctx.save();
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(ix, iy, side, side, Math.max(4, r * 0.55)); ctx.clip(); }
+      if (rec && rec.ready && rec.img) {
+        ctx.drawImage(rec.img, ix, iy, side, side);
+      } else {
+        ctx.fillStyle = T.color;
+        ctx.globalAlpha = 0.22;
+        ctx.fillRect(ix, iy, side, side);
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = T.color;
+      ctx.lineWidth = opts.bold ? 3 : 2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x + 1.5, y + 1.5, w - 3, h - 3, r); ctx.stroke(); }
+
+      // 星级（红色 2 星以上才有意义，其余都是一星）
+      var sy = y + h - 9;
+      var gapS = 9, startX = x + w / 2 - ((star - 1) * gapS) / 2;
+      for (var s = 0; s < star; s++) UI.drawStar(ctx, startX + s * gapS, sy, 4, '#ffd166');
+    },
+
+    // 武器列表（cls 为空 = 全部，即背包）
+    drawWeapons: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#0a1030');
+      grad.addColorStop(1, '#1a1440');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      var cls = game.weaponCls || null;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(cls ? (D.PROTOS[cls].name + '武器') : '武器背包', W / 2, 42);
+      UI.button(ctx, 'wback', 12, 12, 88, 40, '‹ 返回', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState(game.weaponBack || 'menu');
+      });
+      UI.pill(ctx, W - 128, 16, 116, 30, 'rgba(0,0,0,0.45)', 15);
+      UI.drawDiamond(ctx, W - 112, 31, 8);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(G.Meta.diamonds), W - 68, 36);
+
+      // 已装备条
+      var barCls = cls || G.Meta.selected;
+      var eq = G.Weapon.equipped(barCls);
+      var barY = 62;
+      UI.pill(ctx, 12, barY, W - 24, 46, 'rgba(12,20,48,0.88)', 12);
+      ctx.textAlign = 'left';
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('已装备', 24, barY + 19);
+      if (eq) {
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillStyle = G.Weapon.tierOf(eq).color;
+        ctx.fillText(G.Weapon.label(eq), 24, barY + 36);
+        ctx.textAlign = 'right';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillStyle = '#7bed9f';
+        ctx.fillText('攻击 +' + Math.round((G.Weapon.bonus(eq) - 1) * 100) + '%', W - 24, barY + 29);
+      } else {
+        ctx.font = '13px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillText('空 · 点下面的武器再按「装备」', 24, barY + 34);
+      }
+
+      var list = G.Weapon.listOf(cls);
+      var top = 132, bottomBar = 76;
+      ctx.textAlign = 'left';
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('全部武器 · 共 ' + list.length + ' 件', 14, top - 10);
+
+      if (!list.length) {
+        ctx.textAlign = 'center';
+        ctx.font = '13px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillText('还没有武器', W / 2, H * 0.4);
+        UI.button(ctx, 'goto_gacha', W / 2 - 90, H * 0.46, 180, 48, '🎁 去抽取', '60 钻/抽', '#c0392b', function () {
+          game.openGacha();
+        });
+        return;
+      }
+
+      // 网格（超出可上下拖动）
+      var cols = Math.max(4, Math.min(5, Math.floor((W - 24 + 10) / 86)));
+      var gap = 10;
+      var cw = (W - 24 - gap * (cols - 1)) / cols;
+      var chh = cw * 1.2;
+      var rows = Math.ceil(list.length / cols);
+      var contentH = rows * (chh + gap) - gap;
+      var viewH = H - top - bottomBar;
+      var maxScroll = Math.max(0, contentH - viewH);
+      var sy = Math.min(Math.max(0, game.weaponScroll || 0), maxScroll);
+      game.weaponScroll = sy;
+      UI._wgrid = { top: top, viewH: viewH, maxScroll: maxScroll };
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, top, W, viewH); ctx.clip();
+      for (var i = 0; i < list.length; i++) {
+        var w = list[i];
+        var gx = 12 + (i % cols) * (cw + gap);
+        var gy = top + Math.floor(i / cols) * (chh + gap) - sy;
+        if (gy + chh < top - 2 || gy > H - bottomBar + 2) continue;
+        var isEq = eq && eq.uid === w.uid;
+        var sel = game.weaponSel === w.uid;
+        UI.drawWeaponCard(ctx, gx, gy, cw, chh, w.cls, w.tier, w.star, { bold: isEq || sel });
+        if (isEq) {
+          ctx.fillStyle = '#ffd166';
+          ctx.beginPath(); ctx.arc(gx + cw - 9, gy + 9, 5, 0, Math.PI * 2); ctx.fill();
+        }
+        if (sel) {
+          ctx.strokeStyle = '#ffd166';
+          ctx.lineWidth = 3;
+          if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gx + 1.5, gy + 1.5, cw - 3, chh - 3, Math.min(14, cw * 0.16)); ctx.stroke(); }
+        }
+        UI.reg('wsel_' + w.uid, gx, gy, cw, chh, (function (uid) {
+          return function () { game.selectWeapon(uid); };
+        })(w.uid));
+      }
+      ctx.restore();
+
+      if (maxScroll > 0) {
+        var trackH = viewH - 8;
+        var thumbH = Math.max(28, trackH * viewH / contentH);
+        var thumbY = top + 4 + (trackH - thumbH) * (sy / maxScroll);
+        UI.pill(ctx, W - 5, thumbY, 3, thumbH, 'rgba(130,170,255,0.45)', 2);
+      }
+
+      // 底部操作条
+      var bw = Math.min(160, (W - 36) / 2), bh = 46, by = H - bh - 14;
+      var selW = game.weaponSel ? G.Weapon.find(game.weaponSel) : null;
+      var isSelEq = selW && eq && selW.uid === eq.uid;
+      if (selW && !isSelEq) {
+        UI.button(ctx, 'wequip', 12, by, bw, bh, '装备', G.Weapon.label(selW), '#2d6cdf', function () {
+          game.equipWeapon(selW);
+        });
+      } else if (selW && isSelEq) {
+        UI.button(ctx, 'wunequip', 12, by, bw, bh, '卸下', '当前已装备', 'rgba(90,100,140,1)', function () {
+          game.unequipWeapon(selW.cls);
+        });
+      } else {
+        UI.button(ctx, 'wequip', 12, by, bw, bh, '装备', '先选一件', '#2d6cdf', function () { }, true);
+      }
+      var canMerge = G.Weapon.mergeable();
+      UI.button(ctx, 'wmerge', W - 12 - bw, by, bw, bh, '一键合成',
+        canMerge > 0 ? ('可合 ' + canMerge + ' 组') : '三合一 / 红2升星', '#8e44ad', function () {
+          game.mergeWeapons();
+        }, canMerge <= 0);
+    },
+
+    // 抽卡页
+    drawGacha: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#120b2c');
+      grad.addColorStop(1, '#1a1440');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('武器获取', W / 2, 42);
+      UI.button(ctx, 'gback', 12, 12, 88, 40, '‹ 返回', null, 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.setState('menu');
+      });
+      UI.pill(ctx, W - 128, 16, 116, 30, 'rgba(0,0,0,0.45)', 15);
+      UI.drawDiamond(ctx, W - 112, 31, 8);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(G.Meta.diamonds), W - 68, 36);
+
+      // 卡池横幅
+      var bx = 12, by = 66, bw2 = W - 24, bh2 = Math.min(252, H * 0.30);
+      var bg2 = ctx.createLinearGradient(bx, by, bx + bw2, by + bh2);
+      bg2.addColorStop(0, 'rgba(90,40,160,0.55)');
+      bg2.addColorStop(0.6, 'rgba(30,24,80,0.9)');
+      bg2.addColorStop(1, 'rgba(12,18,40,0.95)');
+      ctx.fillStyle = bg2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw2, bh2, 16); ctx.fill(); }
+      else ctx.fillRect(bx, by, bw2, bh2);
+      ctx.strokeStyle = 'rgba(181,108,224,0.55)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, bw2 - 2, bh2 - 2, 16); ctx.stroke(); }
+
+      var cardH = Math.min(200, bh2 - 34), cardW = cardH * 0.78;
+      UI.drawWeaponCard(ctx, bx + 18, by + (bh2 - cardH) / 2, cardW, cardH, 'archer', 4, 3, { bold: true });
+
+      var tx0 = bx + cardW + 34;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('弓手武器卡池', tx0, by + 46);
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText('当前仅开放弓手武器', tx0, by + 66);
+
+      // 概率（按实测宽度顺排，不挤在一起）
+      var shown = [['白', 80], ['绿', 10], ['蓝', 6], ['紫', 3], ['红', 1]];
+      var ryy = by + 96;
+      var rx = tx0;
+      ctx.font = '10px sans-serif';
+      for (var i = 0; i < shown.length; i++) {
+        var T = G.Weapon.TIERS[i];
+        ctx.fillStyle = T.color;
+        ctx.beginPath(); ctx.arc(rx + 4, ryy - 3.5, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        var lbl = shown[i][0] + shown[i][1] + '%';
+        ctx.fillText(lbl, rx + 11, ryy);
+        rx += 11 + ctx.measureText(lbl).width + 12;
+      }
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillText('紫 / 红品质抽到时会有光晕', tx0, by + 120);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillText('1 抽 ' + 60 + ' 钻 · 10 抽 ' + 600 + ' 钻', tx0, by + 140);
+
+      // 规则说明
+      var ry = by + bh2 + 14;
+      UI.pill(ctx, 12, ry, W - 24, 100, 'rgba(14,22,50,0.92)', 12);
+      ctx.strokeStyle = 'rgba(130,170,255,0.25)';
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(12.5, ry + 0.5, W - 25, 99, 12); ctx.stroke(); }
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('合成规则', 26, ry + 24);
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      ctx.fillText('3 个同品质 → 高一阶（白→绿→蓝→紫→红）', 26, ry + 47);
+      ctx.fillText('2 个同星级红色 → 高一星（红色最高 5★）', 26, ry + 67);
+      ctx.fillText('装备后提升该职业攻击：每阶 +6%，每星 +4%', 26, ry + 87);
+
+      // 抽卡按钮（贴底，拇指好按）
+      var btnW = Math.min(200, (W - 40) / 2), btnH = 62, btnY = H - btnH - 54;
+      var cost1 = 60, cost10 = 600;
+      // 中间放个背包入口，顺手填掉空白
+      UI.button(ctx, 'gbag', W / 2 - 110, btnY - 96, 220, 44, '📦 我的武器背包',
+        '已有 ' + G.Meta.weapons.length + ' 件', 'rgba(80,90,130,1)', function () {
+          game.openBag();
+        });
+      UI.button(ctx, 'draw1', W / 2 - btnW - 8, btnY, btnW, btnH, '1 抽', '💎' + cost1, '#2d6cdf', function () {
+        game.doGacha(1);
+      }, G.Meta.diamonds < cost1);
+      UI.button(ctx, 'draw10', W / 2 + 8, btnY, btnW, btnH, '10 抽', '💎' + cost10, '#8e44ad', function () {
+        game.doGacha(10);
+      }, G.Meta.diamonds < cost10);
+
+      ctx.textAlign = 'center';
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('钻石来自通关宝箱', W / 2, btnY - 14);
+
+      if (game.gacha) UI.drawGachaResult(ctx, game);
+    },
+
+    // 抽卡结果动画：飞出 → 停留 → 翻面 → 品质光晕（紫/红）
+    drawGachaResult: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var now = Date.now();
+      var t = (now - game.gacha.start) / 1000;
+      ctx.fillStyle = 'rgba(4,6,18,0.97)';
+      ctx.fillRect(0, 0, W, H);
+
+      var cards = game.gacha.cards;
+      var n = cards.length;
+      var cols = n > 1 ? 5 : 1;
+      var rows = n > 1 ? 2 : 1;
+      var gap = n > 1 ? 9 : 0;
+      var cw = n > 1 ? Math.min(88, (W - 44 - gap * 4) / 5) : 172;
+      var chh = cw * 1.34;
+      var gridW = cols * cw + (cols - 1) * gap;
+      var x0 = (W - gridW) / 2;
+      var gridH = rows * chh + (rows - 1) * gap;
+      var y0 = H * 0.46 - gridH / 2;
+
+      var FLY = 0.36, HOLD_END = 0.5, FLIP = 0.22;
+      var allDone = true;
+
+      for (var i = 0; i < n; i++) {
+        var w = cards[i];
+        var delay = n > 1 ? i * 0.075 : 0;
+        var ct = t - delay;
+        if (ct < 0) { allDone = false; continue; }
+
+        var cx = x0 + (i % cols) * (cw + gap) + cw / 2;
+        var cy = y0 + Math.floor(i / cols) * (chh + gap) + chh / 2;
+
+        var px = cx, py = cy, sc = 1, rot = 0;
+        if (ct < FLY) {
+          var k = ct / FLY;
+          var e = 1 - Math.pow(1 - k, 3);          // easeOutCubic
+          px = W / 2 + (cx - W / 2) * e;
+          py = (H + 180) + (cy - H - 180) * e;
+          sc = 0.5 + 0.5 * e;
+          rot = (1 - e) * (i % 2 ? 0.6 : -0.6);
+        } else if (ct < HOLD_END) {
+          var b = (ct - FLY) / (HOLD_END - FLY);
+          sc = 1 + 0.07 * Math.sin(b * Math.PI);   // 落定微弹
+        }
+
+        var revealed = ct >= HOLD_END + FLIP;
+        var flipK = 1;
+        if (ct >= HOLD_END && ct < HOLD_END + FLIP) {
+          var fp = (ct - HOLD_END) / FLIP;
+          flipK = Math.abs(Math.cos(Math.PI * fp));
+        } else if (ct >= HOLD_END + FLIP) {
+          flipK = 1;
+        } else {
+          flipK = 1;
+          allDone = false;
+        }
+
+        var T = G.Weapon.tierOf(w);
+        // 稀有品质光晕（紫/红）
+        if (revealed && w.tier >= 3) {
+          var pulse = 0.6 + 0.4 * Math.sin(now / 280 + i * 0.7);
+          var rg = ctx.createRadialGradient(px, py, cw * 0.22, px, py, cw * 1.35);
+          rg.addColorStop(0, T.glow);
+          rg.addColorStop(0.4, T.glow.replace(/[\d.]+\)$/, '0.32)'));
+          rg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.globalAlpha = 0.45 + 0.4 * pulse;
+          ctx.fillStyle = rg;
+          ctx.beginPath(); ctx.arc(px, py, cw * 1.35, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(rot);
+        ctx.scale(sc * (revealed ? 1 : flipK), sc);
+        if (revealed) {
+          UI.drawWeaponCard(ctx, -cw / 2, -chh / 2, cw, chh, w.cls, w.tier, w.star, { bold: true });
+        } else {
+          UI.drawCardBack(ctx, -cw / 2, -chh / 2, cw, chh);
+        }
+        ctx.restore();
+
+        // 翻开后写品质名
+        if (revealed && n === 1) {
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 18px sans-serif';
+          ctx.fillStyle = T.color;
+          ctx.fillText(T.name + '品质 · ' + w.star + '★', cx, cy + chh / 2 + 34);
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.fillText('已放入背包', cx, cy + chh / 2 + 54);
+        }
+      }
+
+      var ready = allDone && t > 0.9;
+      ctx.textAlign = 'center';
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = ready ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)';
+      ctx.fillText(ready ? '点击任意处继续 · 武器已入库' : '点击可加速', W / 2, H * 0.9);
+
+      UI.reg('gacha_any', 0, 0, W, H, function () {
+        if (!ready) { game.skipGacha(); return; }
+        game.closeGacha();
+      });
     },
 
     // 宝箱矢量绘制（左上角x,y，宽w高h）；state: null | 'opened' | 'locked'
@@ -1159,9 +1613,12 @@ var G = require('../boot.js');
       UI.begin();
       UI._slider = null;
       switch (game.state) {
-        case 'menu': UI.drawMenu(ctx, game); break;
-        case 'heroes': UI.drawHeroes(ctx, game); break;
+        case 'menu': UI.drawMenu(ctx, game); UI.drawAnnounce(ctx, game, 0.84); break;
+        case 'heroes': UI.drawHeroes(ctx, game); UI.drawAnnounce(ctx, game, 0.88); break;
         case 'changelog': UI.drawChangelog(ctx, game); break;
+        case 'weapons':
+        case 'bag': UI.drawWeapons(ctx, game); UI.drawAnnounce(ctx, game, 0.82); break;
+        case 'gacha': UI.drawGacha(ctx, game); break;
         case 'playing':
           UI.drawHud(ctx, game);
           if (game.panelHero) UI.drawHeroPanel(ctx, game);

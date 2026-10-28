@@ -38,6 +38,9 @@ var G = require('../boot.js');
     // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
     // boxes[i]=该档是否达成；claimed[i]=该档是否已领取。重打同一关只增不减，已领取不复活。
     chests: {},
+    weapons: [],                      // 武器背包 [{ uid, cls, tier, star }]
+    equip: {},                        // 各职业已装备武器：{ archer: uid }
+    nextWuid: 1,                      // 武器自增 id
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -51,6 +54,15 @@ var G = require('../boot.js');
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
         Meta.chests = normalizeChests(m.chests);
+        Meta.weapons = (m.weapons && m.weapons.length !== undefined) ? m.weapons : [];
+        Meta.equip = m.equip || {};
+        Meta.nextWuid = m.nextWuid || 1;
+        // 兼容旧存档：缺 uid 的武器补一个，nextWuid 保证不撞号
+        for (var wi = 0; wi < Meta.weapons.length; wi++) {
+          var wv = Meta.weapons[wi];
+          if (!wv.uid) wv.uid = Meta.nextWuid++;
+          if (wv.uid >= Meta.nextWuid) Meta.nextWuid = wv.uid + 1;
+        }
       }
     },
     save: function () {
@@ -59,6 +71,7 @@ var G = require('../boot.js');
         levels: Meta.levels, selected: Meta.selected,
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
         fx: Meta.fx,
+        weapons: Meta.weapons, equip: Meta.equip, nextWuid: Meta.nextWuid,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests
       });
     },
@@ -158,10 +171,11 @@ var G = require('../boot.js');
       var lv = Meta.levelOf(cls);
       var k = lv - 1;
       var B = D.META.BONUS;
+      var wb = (G.Weapon ? G.Weapon.attackBonus(cls) : 1);   // 已装备武器加成
       var st = {
         cls: cls, name: p.name, color: p.color, desc: p.desc, level: lv,
         maxHp: Math.round(p.hp * (1 + B.hp * k)),
-        dmg: p.dmg * (1 + B.dmg * k),
+        dmg: p.dmg * (1 + B.dmg * k) * wb,
         interval: p.interval * (1 - B.aspeed * k),
         speed: p.speed * (1 + B.speed * k),
         range: p.range, bulletSpeed: p.bulletSpeed || 0,

@@ -132,5 +132,23 @@ var G = require('../boot.js');
     }
   };
 
+  // ---- 图片（武器贴图等）：两端同一套接口 ----
+  P._imgCache = {};
+  P.loadImage = function (src) {
+    var rec = P._imgCache[src];
+    if (rec) return rec;
+    rec = { img: null, ready: false, failed: false };
+    try {
+      var img = P.isWx ? wx.createImage() : new Image();
+      img.onload = function () { rec.ready = true; };
+      img.onerror = function () { rec.failed = true; };
+      img.src = src;
+      rec.img = img;
+      if (!P.isWx && img.complete && img.width) rec.ready = true;
+    } catch (e) { rec.failed = true; }
+    P._imgCache[src] = rec;
+    return rec;
+  };
+
   G.P = P;
 })();
