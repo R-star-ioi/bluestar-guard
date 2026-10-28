@@ -55,7 +55,9 @@ var G = require('../boot.js');
         atkT: U.rand(0.3, 1.0), // 攻击计时
         shootT: 0,
         vx: 0, vy: 0, wobT: Math.random() * 10,
-        stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0
+        stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0,
+        freezeT: 0, chillT: 0, chillSlow: 0.4, chillAspd: 0.2,
+        burnT: 0, burnN: 0, burnDps: 0, burnFx: 0
       };
       if (opts.elite) {
         e.elite = true;
@@ -95,6 +97,26 @@ var G = require('../boot.js');
         if (e.orbT > 0) e.orbT -= dt;
         if (e.slowT > 0) e.slowT -= dt;
         if (e.stunT > 0) e.stunT -= dt;
+        if (e.freezeT > 0) e.freezeT -= dt;
+        if (e.chillT > 0) e.chillT -= dt;
+
+        // 灼烧（武器火焰效果）：持续掉血，可被烧死
+        if (e.burnT > 0) {
+          e.burnT -= dt;
+          var bd = (e.burnN || 0) * (e.burnDps || 0) * dt;
+          if (bd > 0) e.hp -= bd;
+          e.burnFx = (e.burnFx || 0) + dt;
+          if (e.burnFx > 0.5) {
+            e.burnFx = 0;
+            var tickDmg = (e.burnN || 0) * (e.burnDps || 0) * 0.5;
+            if (tickDmg >= 1) G.FX.text(e.x + U.rand(-7, 7), e.y - e.r - 3, String(Math.round(tickDmg)), '#ff9f43', 10);
+          }
+          if (e.hp <= 0) {
+            e.hp = 0;
+            Enemy.damage(game, e, 0, e.x, e.y, false, false, true);
+          }
+          if (e.dead) continue;
+        }
         // 击退
         if (e.kbX || e.kbY) {
           e.x += (e.kbX || 0) * dt;
@@ -149,8 +171,11 @@ var G = require('../boot.js');
           }
         }
 
-        var sp = e.speed * (e.slowT > 0 ? 0.55 : 1);
-        if (e.stunT <= 0) {
+        // 寒霜：移速降低；冻结/眩晕：完全不能动
+        var chilled = e.chillT > 0;
+        var frozen = e.freezeT > 0 || e.stunT > 0;
+        var sp = e.speed * (e.slowT > 0 ? 0.55 : 1) * (chilled ? (1 - (e.chillSlow || 0.4)) : 1);
+        if (!frozen) {
           if (d > stopDist) {
             e.x += (dx / d * sp + sepX) * dt;
             e.y += (dy / d * sp + sepY) * dt;
@@ -159,9 +184,9 @@ var G = require('../boot.js');
           }
         }
 
-        // 攻击（眩晕时不攻击）
-        e.atkT -= dt;
-        if (e.atkT <= 0 && e.stunT <= 0) {
+        // 攻击（眩晕/冻结时不攻击；寒霜降低攻击频率）
+        e.atkT -= dt * (chilled ? (1 - (e.chillAspd || 0.2)) : 1);
+        if (e.atkT <= 0 && !frozen) {
           if (targetingPlayer && d <= targetR + 6) {
             e.atkT = 1.0;
             pl.damage(e.dmg, game);
@@ -176,7 +201,7 @@ var G = require('../boot.js');
         }
 
         // 远程敌人射击
-        if (sh && sh.shootRange && !pl.dead && e.stunT <= 0) {
+        if (sh && sh.shootRange && !pl.dead && !frozen) {
           e.shootT -= dt;
           if (e.shootT <= 0 && dPlayer < sh.shootRange * sh.shootRange) {
             e.shootT = sh.shootInterval;
@@ -206,17 +231,19 @@ var G = require('../boot.js');
       }
     },
 
-    damage: function (game, e, dmg, hx, hy, big, crit) {
+    damage: function (game, e, dmg, hx, hy, big, crit, silent) {
       if (e.dead) return;
       // 暴击判定在调用方处理，这里直接扣血
       e.hp -= dmg;
       e.hitT = 0.12;
-      // 伤害飘字：暴击更大更红，重击（炮/爆）稍大
-      var txtSize = big ? 15 : 12;
-      var txtColor = '#fff';
-      if (crit) { txtSize = big ? 21 : 19; txtColor = '#ff4d4d'; }
-      G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), txtColor, txtSize, !!crit);
-      G.FX.spray(e.x, e.y, Math.atan2(e.y - (hy || e.y), e.x - (hx || e.x)) + Math.PI, big ? 6 : 3, e.color, 130, 0.35, 3);
+      if (!silent) {
+        // 伤害飘字：暴击更大更红，重击（炮/爆）稍大
+        var txtSize = big ? 15 : 12;
+        var txtColor = '#fff';
+        if (crit) { txtSize = big ? 21 : 19; txtColor = '#ff4d4d'; }
+        G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), txtColor, txtSize, !!crit);
+        G.FX.spray(e.x, e.y, Math.atan2(e.y - (hy || e.y), e.x - (hx || e.x)) + Math.PI, big ? 6 : 3, e.color, 130, 0.35, 3);
+      }
       if (e.hp <= 0) {
         e.dead = true;
         G.Audio.play('kill');
@@ -295,8 +322,37 @@ var G = require('../boot.js');
           ctx.fillText('👑', sx, sy - e.r - 6);
         }
 
+        // 冻结 / 寒霜（冰霜武器）
+        if (e.freezeT > 0) {
+          ctx.fillStyle = 'rgba(200,240,255,0.26)';
+          ctx.beginPath(); ctx.arc(sx, sy, e.r + 2, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(170,235,255,0.95)';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(sx, sy, e.r + 3, 0, Math.PI * 2); ctx.stroke();
+        } else if (e.chillT > 0) {
+          ctx.strokeStyle = 'rgba(143,216,255,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(sx, sy, e.r + 2.5, 0, Math.PI * 2); ctx.stroke();
+        }
+
+        // 灼烧火苗（火焰武器）
+        if (e.burnT > 0 && e.burnN > 0) {
+          var ffa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+          ctx.globalAlpha = 0.8 * ffa;
+          var bn = Math.min(3, e.burnN);
+          for (var bi = 0; bi < bn; bi++) {
+            var bx2 = sx + Math.sin(t * 9 + bi * 2.1) * e.r * 0.55;
+            var by2 = sy - e.r - 3 - ((t * 26 + bi * 11) % 14);
+            ctx.fillStyle = bi % 2 ? '#ffb347' : '#ff6b3d';
+            ctx.beginPath();
+            ctx.arc(bx2, by2, 2.4 - bi * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+
         // 眩晕标记
-        if (e.stunT > 0) {
+        if (e.stunT > 0 && e.freezeT <= 0) {
           ctx.font = '12px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText('✦', sx, sy - e.r - 12);

@@ -14,6 +14,34 @@ var G = require('../boot.js');
   // 抽卡概率：白 80% / 绿 10% / 蓝 6% / 紫 3% / 红 1%
   var RATES = [0.80, 0.10, 0.06, 0.03, 0.01];
 
+  // ★ 品质基线属性（白/绿/蓝/紫）。红色单独按星级成长，见 RED_BASE / RED_GROW
+  //   atk/aspd/crit/critDmg/alldmg 都是比率；range 是倍率；pierceInc 可负（绿色穿透后衰减）
+  var BASE_T = [
+    { tier: 0, atk: 0.04, aspd: 0.04, crit: 0, critDmg: 0, range: 1, alldmg: 0,
+      pierce: 0, pierceInc: 0 },
+    { tier: 1, atk: 0.06, aspd: 0.06, crit: 0, critDmg: 0, range: 1, alldmg: 0,
+      pierce: 1, pierceInc: -0.10 },
+    { tier: 2, atk: 0.12, aspd: 0.12, crit: 0.08, critDmg: 0.15, range: 1, alldmg: 0,
+      pierce: 2, pierceInc: 0.05,
+      frostSplash: 0.30,        // 命中触发冰霜溅射：周围 30% 攻击力
+      frostR: 72,
+      freezeChance: 0.35, freezeDur: 0.8,
+      chillSlow: 0.40, chillAspd: 0.20, chillDur: 2 },
+    { tier: 3, atk: 0.18, aspd: 0.18, crit: 0.12, critDmg: 0.30, range: 1.15, alldmg: 0.40,
+      pierce: 99, pierceInc: 0.12, pierceAll: true,
+      ignoreArmor: 0.15,        // 折算为对带甲目标的额外穿透
+      shadowSplit: 2, shadowSplitRatio: 0.60, shadowCd: 0.1 }
+  ];
+
+  // 红色 1★ 基线；每星：攻击 +30%、攻速 +5%、暴击率 +3%、暴伤 +10%
+  var RED_BASE = {
+    atk: 0.25, aspd: 0.22, crit: 0.15, critDmg: 0.40, range: 1.18, alldmg: 0.80,
+    pierce: 99, pierceInc: 0.20, pierceAll: true,
+    burstR: 150, burstRatio: 1.0,      // 炎爆
+    burnStack: 3, burnDps: 0.25, burnDur: 3,
+    ignoreFireRes: 0.25
+  };
+
   var Weapon = {
     TIERS: TIERS,
     RATES: RATES,
@@ -119,6 +147,51 @@ var G = require('../boot.js');
       all.splice(i, 1);
       if (G.Meta.equip[w.cls] === w.uid) G.Meta.equip[w.cls] = 0;
     },
+
+    // ★ 武器的完整战斗属性（红色按星级成长）。返回 null = 没有武器
+    stats: function (w) {
+      if (!w) return null;
+      var star = w.star || 1;
+      var g = star - 1;
+      var k;
+      if (w.tier < 4) {
+        var b = BASE_T[w.tier] || BASE_T[0];
+        var o = {};
+        for (k in b) o[k] = b[k];
+        o.tier = w.tier; o.star = star;
+        return o;
+      }
+      var atk = RED_BASE.atk * (1 + 0.30 * g);
+      if (star >= 3) atk += 0.40;                 // 3★ 起基础攻击额外 +40%
+      return {
+        tier: 4, star: star,
+        atk: atk,
+        aspd: RED_BASE.aspd + 0.05 * g,
+        crit: RED_BASE.crit + 0.03 * g,
+        critDmg: RED_BASE.critDmg + 0.10 * g,
+        range: RED_BASE.range,
+        alldmg: RED_BASE.alldmg,
+        pierce: 99, pierceInc: 0.20, pierceAll: true,
+        ignoreArmor: RED_BASE.ignoreFireRes,
+        // —— 炎爆 / 灼烧 ——
+        burstR: star >= 2 ? 220 : RED_BASE.burstR,
+        burstRatio: 1.0,
+        burnStack: star >= 2 ? 5 : 3,
+        burnDps: star >= 2 ? 0.35 : 0.25,
+        burnDur: RED_BASE.burnDur,
+        killHeal: star >= 2 ? 8 : 0,               // 击杀灼烧目标回血
+        trail: star >= 3,                          // 火焰轨迹
+        vuln: star >= 3 ? 0.15 : 0,                // 灼烧目标全局易伤
+        doubleBurst: star >= 4,                    // 暴击双重炎爆
+        burstBonus: star >= 4 ? 1.0 : 0,           // 暴击时炎爆伤害 +100%
+        totemChance: star >= 4 ? 0.30 : 0,         // 火焰图腾
+        rainEvery: star >= 5 ? 3 : 0,              // 每 3 杀 → 焚天箭雨
+        dragon: star >= 5,                         // 龙炎怒心
+        burnSpread: star >= 5                      // 灼烧传染
+      };
+    },
+    // 当前装备武器的战斗属性（没有就 null）
+    statsOf: function (cls) { return Weapon.stats(Weapon.equipped(cls)); },
 
     // 装备加成：每阶 +6%，每星 +4%（白1★ = 1.00，红5★ = 1.40）
     bonus: function (w) {

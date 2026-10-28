@@ -701,6 +701,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.12', title: '武器战斗效果', lines: ['五档品质各有独立效果：穿透、冰霜冻结、暗影分裂、炎爆灼烧', '红色按星级进阶：2★灼烧强化 3★火焰轨迹 4★双重炎爆+图腾 5★焚天箭雨', '武器属性改为真实加成（攻击/攻速/暴击率/暴击伤害/射程）'] },
     { ver: 'v0.5.11', title: '英雄不再持械', lines: ['招募来的英雄只显示职业图标，不再跟着拿当前装备的武器', '装备的武器只显示在玩家操控的主角身上'] },
     { ver: 'v0.5.10', title: '抽卡与背包手感', lines: ['卡池概率改成两行显示，不再顶出卡片', '抽到紫/红品质时翻牌慢放 + 音效', '武器列表滚动后，顶栏区域不再误点到下面的武器'] },
     { ver: 'v0.5.9', title: '武器朝向修复', lines: ['主角朝右时武器没有镜像，弓箭方向是反的', '现在朝哪边就镜像到哪边；英雄的弓也统一朝外'] },
@@ -739,7 +740,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.11';
+  D.VERSION = 'v0.5.12';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -941,16 +942,22 @@ var G = require('../boot.js');
       var lv = Meta.levelOf(cls);
       var k = lv - 1;
       var B = D.META.BONUS;
-      var wb = (G.Weapon ? G.Weapon.attackBonus(cls) : 1);   // 已装备武器加成
+      var ws = (G.Weapon ? G.Weapon.statsOf(cls) : null);   // 已装备武器的战斗属性
+      var wAtk = ws ? (1 + ws.atk) * (1 + (ws.alldmg || 0)) : 1;
+      var wAspd = ws ? (1 + ws.aspd) : 1;
+      var wRange = ws ? (ws.range || 1) : 1;
       var st = {
         cls: cls, name: p.name, color: p.color, desc: p.desc, level: lv,
         maxHp: Math.round(p.hp * (1 + B.hp * k)),
-        dmg: p.dmg * (1 + B.dmg * k) * wb,
-        interval: p.interval * (1 - B.aspeed * k),
+        dmg: p.dmg * (1 + B.dmg * k) * wAtk,
+        interval: p.interval * (1 - B.aspeed * k) / wAspd,
         speed: p.speed * (1 + B.speed * k),
-        range: p.range, bulletSpeed: p.bulletSpeed || 0,
+        range: p.range * wRange, bulletSpeed: p.bulletSpeed || 0,
         splash: p.splash || 0, melee: !!p.melee,
-        regen: p.regenBase ? p.regenBase + p.regenPerLv * k : 0
+        regen: p.regenBase ? p.regenBase + p.regenPerLv * k : 0,
+        weapon: ws,
+        wcrit: ws ? (ws.crit || 0) : 0,
+        wcritDmg: ws ? (ws.critDmg || 0) : 0
       };
       return st;
     }
@@ -975,6 +982,34 @@ var G = require('../boot.js');
   ];
   // 抽卡概率：白 80% / 绿 10% / 蓝 6% / 紫 3% / 红 1%
   var RATES = [0.80, 0.10, 0.06, 0.03, 0.01];
+
+  // ★ 品质基线属性（白/绿/蓝/紫）。红色单独按星级成长，见 RED_BASE / RED_GROW
+  //   atk/aspd/crit/critDmg/alldmg 都是比率；range 是倍率；pierceInc 可负（绿色穿透后衰减）
+  var BASE_T = [
+    { tier: 0, atk: 0.04, aspd: 0.04, crit: 0, critDmg: 0, range: 1, alldmg: 0,
+      pierce: 0, pierceInc: 0 },
+    { tier: 1, atk: 0.06, aspd: 0.06, crit: 0, critDmg: 0, range: 1, alldmg: 0,
+      pierce: 1, pierceInc: -0.10 },
+    { tier: 2, atk: 0.12, aspd: 0.12, crit: 0.08, critDmg: 0.15, range: 1, alldmg: 0,
+      pierce: 2, pierceInc: 0.05,
+      frostSplash: 0.30,        // 命中触发冰霜溅射：周围 30% 攻击力
+      frostR: 72,
+      freezeChance: 0.35, freezeDur: 0.8,
+      chillSlow: 0.40, chillAspd: 0.20, chillDur: 2 },
+    { tier: 3, atk: 0.18, aspd: 0.18, crit: 0.12, critDmg: 0.30, range: 1.15, alldmg: 0.40,
+      pierce: 99, pierceInc: 0.12, pierceAll: true,
+      ignoreArmor: 0.15,        // 折算为对带甲目标的额外穿透
+      shadowSplit: 2, shadowSplitRatio: 0.60, shadowCd: 0.1 }
+  ];
+
+  // 红色 1★ 基线；每星：攻击 +30%、攻速 +5%、暴击率 +3%、暴伤 +10%
+  var RED_BASE = {
+    atk: 0.25, aspd: 0.22, crit: 0.15, critDmg: 0.40, range: 1.18, alldmg: 0.80,
+    pierce: 99, pierceInc: 0.20, pierceAll: true,
+    burstR: 150, burstRatio: 1.0,      // 炎爆
+    burnStack: 3, burnDps: 0.25, burnDur: 3,
+    ignoreFireRes: 0.25
+  };
 
   var Weapon = {
     TIERS: TIERS,
@@ -1082,6 +1117,51 @@ var G = require('../boot.js');
       if (G.Meta.equip[w.cls] === w.uid) G.Meta.equip[w.cls] = 0;
     },
 
+    // ★ 武器的完整战斗属性（红色按星级成长）。返回 null = 没有武器
+    stats: function (w) {
+      if (!w) return null;
+      var star = w.star || 1;
+      var g = star - 1;
+      var k;
+      if (w.tier < 4) {
+        var b = BASE_T[w.tier] || BASE_T[0];
+        var o = {};
+        for (k in b) o[k] = b[k];
+        o.tier = w.tier; o.star = star;
+        return o;
+      }
+      var atk = RED_BASE.atk * (1 + 0.30 * g);
+      if (star >= 3) atk += 0.40;                 // 3★ 起基础攻击额外 +40%
+      return {
+        tier: 4, star: star,
+        atk: atk,
+        aspd: RED_BASE.aspd + 0.05 * g,
+        crit: RED_BASE.crit + 0.03 * g,
+        critDmg: RED_BASE.critDmg + 0.10 * g,
+        range: RED_BASE.range,
+        alldmg: RED_BASE.alldmg,
+        pierce: 99, pierceInc: 0.20, pierceAll: true,
+        ignoreArmor: RED_BASE.ignoreFireRes,
+        // —— 炎爆 / 灼烧 ——
+        burstR: star >= 2 ? 220 : RED_BASE.burstR,
+        burstRatio: 1.0,
+        burnStack: star >= 2 ? 5 : 3,
+        burnDps: star >= 2 ? 0.35 : 0.25,
+        burnDur: RED_BASE.burnDur,
+        killHeal: star >= 2 ? 8 : 0,               // 击杀灼烧目标回血
+        trail: star >= 3,                          // 火焰轨迹
+        vuln: star >= 3 ? 0.15 : 0,                // 灼烧目标全局易伤
+        doubleBurst: star >= 4,                    // 暴击双重炎爆
+        burstBonus: star >= 4 ? 1.0 : 0,           // 暴击时炎爆伤害 +100%
+        totemChance: star >= 4 ? 0.30 : 0,         // 火焰图腾
+        rainEvery: star >= 5 ? 3 : 0,              // 每 3 杀 → 焚天箭雨
+        dragon: star >= 5,                         // 龙炎怒心
+        burnSpread: star >= 5                      // 灼烧传染
+      };
+    },
+    // 当前装备武器的战斗属性（没有就 null）
+    statsOf: function (cls) { return Weapon.stats(Weapon.equipped(cls)); },
+
     // 装备加成：每阶 +6%，每星 +4%（白1★ = 1.00，红5★ = 1.40）
     bonus: function (w) {
       if (!w) return 1;
@@ -1167,6 +1247,338 @@ var G = require('../boot.js');
   };
 
   G.Weapon = Weapon;
+})();
+
+});
+__def("js/systems/weaponfx.js", function (module, exports, require) {
+// 武器战斗效果中枢：穿透由 Proj 处理，这里负责命中特效、灼烧、地面效果
+// 数据来源：Weapon.stats(w)（见 core/weapon.js）
+var G = require('../boot.js');
+(function () {
+  var U = G.U;
+
+  var WeaponFX = {
+    fields: [],      // 地面效果：{ type:'fire'|'totem', x,y,r,t,life,tick,... }
+    pending: [],     // 延时爆炸：{ t,x,y,r,dmg,ws,atk }
+    active: null,    // 本帧生效的武器属性（开局/换装后由 refresh 同步）
+    rainKill: 0,     // 焚天箭雨累计击杀
+    rainReady: false,
+
+    reset: function () {
+      WeaponFX.fields.length = 0;
+      WeaponFX.pending.length = 0;
+      WeaponFX.rainKill = 0;
+      WeaponFX.rainReady = false;
+      WeaponFX.refresh();
+    },
+
+    // 从主角面板同步当前武器（protoStats 里带了 weapon 字段）
+    refresh: function () {
+      var p = G.Player;
+      WeaponFX.active = (p && p.proto && p.proto.weapon) || null;
+      return WeaponFX.active;
+    },
+
+    // ============ 弹丸命中 ============
+    onHit: function (p, e, game, crit) {
+      var ws = p.wx || WeaponFX.active;
+      if (!ws) return;
+      var atk = p.atk0 || p.dmg;
+
+      // —— 蓝：冰霜溅射 + 冻结 / 寒霜 ——
+      if (ws.frostSplash) {
+        var fr = ws.frostR || 72;
+        G.FX.ring(e.x, e.y, '#8fd8ff', fr, 0.26, 2.5);
+        G.FX.burst(e.x, e.y, 6, '#bfe9ff', 120, 0.35, 3);
+        WeaponFX.aoe(game, e.x, e.y, fr, atk * ws.frostSplash, '#8fd8ff');
+        if (Math.random() < (ws.freezeChance || 0)) {
+          e.freezeT = Math.max(e.freezeT || 0, ws.freezeDur || 0.8);
+          G.FX.ring(e.x, e.y, '#d6f2ff', e.r + 12, 0.3, 2);
+          G.FX.text(e.x, e.y - e.r - 18, '冻结', '#9fe6ff', 12);
+          G.Audio.play('crystal');
+        } else {
+          e.chillT = ws.chillDur || 2;
+          e.chillSlow = ws.chillSlow || 0.4;
+          e.chillAspd = ws.chillAspd || 0.2;
+        }
+      }
+
+      // —— 紫：暴击 → 暗影分裂 ——
+      if (ws.shadowSplit && crit) WeaponFX.shadowSplit(game, e, atk, ws);
+
+      // —— 红：炎爆 ——
+      if (ws.burstR) WeaponFX.flameBurst(game, e, atk, ws, crit);
+    },
+
+    // 范围伤害（不再递归触发武器特效）
+    aoe: function (game, x, y, r, dmg, color) {
+      var near = game.grid.query(x, y, r + 24);
+      var hit = false;
+      for (var i = 0; i < near.length; i++) {
+        var e = near[i];
+        if (e.dead) continue;
+        if (U.dist2(x, y, e.x, e.y) <= (r + e.r) * (r + e.r)) {
+          game.damageEnemy(e, dmg, x, y, false);
+          hit = true;
+        }
+      }
+      return hit;
+    },
+
+    // ============ 炎爆 / 灼烧 ============
+    flameBurst: function (game, e, atk, ws, crit) {
+      var ratio = ws.burstRatio || 1;
+      if (crit && ws.burstBonus) ratio += ws.burstBonus;
+      var r = ws.burstR || 150;
+      WeaponFX.burst(game, e.x, e.y, r, atk * ratio, ws, atk);
+      // 4★：暴击双重炎爆（第二发更大更痛）
+      if (crit && ws.doubleBurst) {
+        WeaponFX.pending.push({
+          t: 0.14, x: e.x, y: e.y, r: r * 1.35,
+          dmg: atk * ratio * 1.5, ws: ws, atk: atk
+        });
+      }
+      // 4★：火焰图腾
+      if (ws.totemChance && Math.random() < ws.totemChance) {
+        WeaponFX.fields.push({
+          type: 'totem', x: e.x, y: e.y, r: 70, t: 2.5, life: 2.5,
+          tick: 0, dps: atk * 0.8
+        });
+        G.Audio.play('rare');
+      }
+    },
+
+    burst: function (game, x, y, r, dmg, ws, atk) {
+      var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+      G.FX.ring(x, y, '#ff8c42', r, 0.35, 6);
+      G.FX.burst(x, y, Math.round(10 + 8 * fa), '#ffb347', 240, 0.5, 5);
+      G.FX.burst(x, y, Math.round(6 + 4 * fa), '#ff5722', 170, 0.4, 4);
+      G.Audio.play('boom');
+      G.Camera.shake(2.5, 0.12);
+      var near = game.grid.query(x, y, r + 24);
+      for (var i = 0; i < near.length; i++) {
+        var e2 = near[i];
+        if (e2.dead) continue;
+        if (U.dist2(x, y, e2.x, e2.y) <= (r + e2.r) * (r + e2.r)) {
+          game.damageEnemy(e2, dmg, x, y, true);
+          WeaponFX.applyBurn(e2, ws, atk);
+        }
+      }
+    },
+
+    // 灼烧：层数决定每秒伤害，统一刷新持续时间
+    applyBurn: function (e, ws, atk) {
+      if (!ws || !ws.burnStack || !atk) return;
+      var cur = (e.burnT > 0 ? (e.burnN || 0) : 0);
+      e.burnN = Math.min(ws.burnStack, cur + 1);
+      e.burnT = ws.burnDur || 3;
+      e.burnLife = ws.burnDur || 3;
+      e.burnDps = atk * (ws.burnDps || 0.25);
+      e.burnMax = ws.burnStack;
+    },
+
+    // 灼烧易伤（3★+）：对被点燃目标的伤害加成
+    vulnMult: function (e) {
+      var ws = WeaponFX.active;
+      if (!ws || !ws.vuln) return 1;
+      return (e && e.burnT > 0 && e.burnN > 0) ? (1 + ws.vuln) : 1;
+    },
+
+    // ============ 紫色：暗影分裂 ============
+    nearest: function (game, x, y, range, n, skip) {
+      var list = G.Enemy.list, best = [];
+      var r2 = range * range;
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        if (e.dead || e === skip) continue;
+        var d = U.dist2(x, y, e.x, e.y);
+        if (d > r2) continue;
+        best.push({ e: e, d: d });
+      }
+      best.sort(function (a, b) { return a.d - b.d; });
+      var out = [];
+      for (var j = 0; j < best.length && out.length < n; j++) out.push(best[j].e);
+      return out;
+    },
+
+    shadowSplit: function (game, e, atk, ws) {
+      var n = ws.shadowSplit || 2;
+      var targets = WeaponFX.nearest(game, e.x, e.y, 280, n, e);
+      if (!targets.length) targets.push(e);
+      var dmg = atk * (ws.shadowSplitRatio || 0.6);
+      for (var i = 0; i < n; i++) {
+        var t = targets[i % targets.length];
+        G.Proj.spawn({
+          x: e.x, y: e.y,
+          ang: U.angle(e.x, e.y, t.x, t.y),
+          speed: 780, dmg: dmg, size: 5, color: '#a55eea',
+          friendly: true, life: 1.4, kind: 'shadow',
+          homing: t, shadow: true
+        });
+      }
+      G.FX.ring(e.x, e.y, '#a55eea', 42, 0.28, 3);
+      G.Audio.play('crystal');
+    },
+
+    // ============ 地面火焰（3★ 轨迹）============
+    addFire: function (x, y, atk, ws) {
+      var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+      if (fa < 0.15) return;    // 特效关掉时少生成一些，省性能
+      WeaponFX.fields.push({
+        type: 'fire', x: x, y: y, r: 24, t: 1.0, life: 1.0, tick: 0.34,
+        dmg: atk * 0.30, ws: ws, atk: atk
+      });
+    },
+
+    // ============ 5★ 焚天箭雨 ============
+    consumeRain: function () {
+      if (!WeaponFX.rainReady) return false;
+      WeaponFX.rainReady = false;
+      WeaponFX.rainKill = 0;
+      return true;
+    },
+    castRain: function (game, target, ws, atk) {
+      for (var i = 0; i < 7; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var rr = 14 + Math.random() * 84;
+        WeaponFX.pending.push({
+          t: 0.055 * i,
+          x: target.x + Math.cos(a) * rr,
+          y: target.y + Math.sin(a) * rr,
+          r: (ws.burstR || 150) * 0.7,
+          dmg: atk * (ws.burstRatio || 1),
+          ws: ws, atk: atk
+        });
+      }
+      G.Audio.play('rarebig');
+      G.FX.text(target.x, target.y - 40, '焚天箭雨', '#ff6b3d', 18);
+    },
+
+    // ============ 击杀回调 ============
+    onKill: function (e, game) {
+      var ws = WeaponFX.active;
+      if (!ws) return;
+      var burning = (e.burnT > 0 && e.burnN > 0);
+      // 2★：击杀灼烧目标回血
+      if (ws.killHeal && burning && G.Player && G.Player.heal) G.Player.heal(ws.killHeal);
+      // 5★：灼烧传染（传递一半层数）
+      if (ws.burnSpread && burning) {
+        var half = Math.max(1, Math.ceil(e.burnN / 2));
+        var near = game.grid.query(e.x, e.y, 120);
+        var spread = false;
+        for (var i = 0; i < near.length; i++) {
+          var o = near[i];
+          if (o === e || o.dead) continue;
+          if (U.dist2(e.x, e.y, o.x, o.y) > 120 * 120) continue;
+          var cur = (o.burnT > 0 ? (o.burnN || 0) : 0);
+          o.burnN = Math.min(ws.burnStack, cur + half);
+          o.burnT = ws.burnDur || 3;
+          o.burnLife = ws.burnDur || 3;
+          o.burnDps = e.burnDps || 1;
+          o.burnMax = ws.burnStack;
+          spread = true;
+        }
+        if (spread) G.FX.ring(e.x, e.y, '#ff8c42', 110, 0.35, 3);
+      }
+      // 5★：焚天箭雨蓄能
+      if (ws.rainEvery) {
+        WeaponFX.rainKill++;
+        if (WeaponFX.rainKill >= ws.rainEvery) WeaponFX.rainReady = true;
+      }
+    },
+
+    // ============ 每帧推进 ============
+    update: function (dt, game) {
+      var i, j;
+      // 延时爆炸
+      for (i = WeaponFX.pending.length - 1; i >= 0; i--) {
+        var q = WeaponFX.pending[i];
+        q.t -= dt;
+        if (q.t <= 0) {
+          WeaponFX.burst(game, q.x, q.y, q.r, q.dmg, q.ws, q.atk);
+          WeaponFX.pending.splice(i, 1);
+        }
+      }
+      // 地面效果
+      var fs = WeaponFX.fields;
+      for (j = fs.length - 1; j >= 0; j--) {
+        var f = fs[j];
+        f.t -= dt;
+        f.tick += dt;
+        if (f.type === 'fire') {
+          if (f.tick >= 0.34) {
+            f.tick = 0;
+            var near = game.grid.query(f.x, f.y, f.r + 20);
+            for (i = 0; i < near.length; i++) {
+              var e2 = near[i];
+              if (e2.dead) continue;
+              if (U.dist2(f.x, f.y, e2.x, e2.y) <= (f.r + e2.r) * (f.r + e2.r)) {
+                game.damageEnemy(e2, f.dmg, f.x, f.y, false);
+                WeaponFX.applyBurn(e2, f.ws, f.atk);
+              }
+            }
+          }
+        } else if (f.type === 'totem') {
+          if (f.tick >= 0.5) {
+            f.tick = 0;
+            WeaponFX.aoe(game, f.x, f.y, f.r, f.dps * 0.5, '#ff8c42');
+          }
+        }
+        if (f.t <= 0) fs.splice(j, 1);
+      }
+    },
+
+    draw: function (ctx, ox, oy) {
+      var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+      if (fa <= 0.02) return;
+      var fs = WeaponFX.fields;
+      for (var i = 0; i < fs.length; i++) {
+        var f = fs[i];
+        var a = Math.max(0, f.t / f.life);
+        var sx = f.x - ox, sy = f.y - oy;
+        if (f.type === 'fire') {
+          var g = ctx.createRadialGradient(sx, sy, 1, sx, sy, f.r);
+          g.addColorStop(0, 'rgba(255,214,120,' + (0.55 * a * fa) + ')');
+          g.addColorStop(0.55, 'rgba(255,120,40,' + (0.34 * a * fa) + ')');
+          g.addColorStop(1, 'rgba(255,60,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(sx, sy, f.r, 0, Math.PI * 2); ctx.fill();
+        } else if (f.type === 'totem') {
+          var k = f.t / f.life;
+          var pulse = 0.6 + 0.4 * Math.sin(Date.now() / 160);
+          ctx.globalAlpha = (0.35 + 0.45 * pulse) * Math.min(1, k * 2) * fa;
+          var g2 = ctx.createRadialGradient(sx, sy, 4, sx, sy, f.r);
+          g2.addColorStop(0, 'rgba(255,190,90,0.95)');
+          g2.addColorStop(0.5, 'rgba(255,110,30,0.6)');
+          g2.addColorStop(1, 'rgba(255,60,0,0)');
+          ctx.fillStyle = g2;
+          ctx.beginPath(); ctx.arc(sx, sy, f.r, 0, Math.PI * 2); ctx.fill();
+          // 图腾柱
+          ctx.globalAlpha = Math.min(1, k * 2) * fa;
+          ctx.fillStyle = '#ffb347';
+          ctx.beginPath();
+          ctx.moveTo(sx, sy - 26);
+          ctx.lineTo(sx + 7, sy + 2);
+          ctx.lineTo(sx - 7, sy + 2);
+          ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+      // 待落下的箭雨：画瞄准圈
+      for (var j = 0; j < WeaponFX.pending.length; j++) {
+        var q = WeaponFX.pending[j];
+        ctx.globalAlpha = 0.55 * fa;
+        ctx.strokeStyle = '#ff8c42';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(q.x - ox, q.y - oy, q.r * 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  };
+
+  G.WeaponFX = WeaponFX;
 })();
 
 });
@@ -1602,8 +2014,14 @@ var G = require('../boot.js');
         color: o.color || '#fff', friendly: !!o.friendly,
         life: o.life || 2, t: 0,
         splash: o.splash || 0,
-        kind: o.kind || 'bullet', // bullet | fireball | cannonball | enemy
-        hitSet: null
+        kind: o.kind || 'bullet', // bullet | fireball | cannonball | enemy | shadow
+        hitSet: null,
+        wx: o.wx || null,           // 武器特效参数（Weapon.stats）
+        atk0: o.atk0 || o.dmg,      // 发射瞬间的攻击力（溅射/灼烧按它算）
+        pierceInc: o.pierceInc || 0,// 每穿透一人伤害变化
+        homing: o.homing || null,   // 追踪目标
+        shadow: !!o.shadow,         // 暗影分裂箭（击杀返冷却）
+        trailX: 1e9, trailY: 1e9
       });
     },
     update: function (dt, game) {
@@ -1611,7 +2029,33 @@ var G = require('../boot.js');
       for (var i = list.length - 1; i >= 0; i--) {
         var p = list[i];
         p.t += dt;
+
+        // 追踪：慢慢转向目标
+        if (p.homing) {
+          if (p.homing.dead) {
+            p.homing = null;
+          } else {
+            var want = Math.atan2(p.homing.y - p.y, p.homing.x - p.x);
+            var cur = Math.atan2(p.vy, p.vx);
+            var diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
+            var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1;
+            var na = cur + U.clamp(diff, -10 * dt, 10 * dt);
+            p.vx = Math.cos(na) * sp;
+            p.vy = Math.sin(na) * sp;
+          }
+        }
+
         p.x += p.vx * dt; p.y += p.vy * dt;
+
+        // 红色 3★+：飞行路径留火焰轨迹
+        if (p.wx && p.wx.trail && G.WeaponFX) {
+          var dx = p.x - p.trailX, dy = p.y - p.trailY;
+          if (dx * dx + dy * dy > 400) {
+            p.trailX = p.x; p.trailY = p.y;
+            G.WeaponFX.addFire(p.x, p.y, p.atk0, p.wx);
+          }
+        }
+
         var dead = p.t >= p.life
           || p.x < -30 || p.y < -30 || p.x > G.D.MAP_W + 30 || p.y > G.D.MAP_H + 30;
         if (!dead) {
@@ -1632,11 +2076,16 @@ var G = require('../boot.js');
         if (p.hitSet && p.hitSet.indexOf(e) >= 0) continue;
         var rr = e.r + p.size;
         if (U.dist2(p.x, p.y, e.x, e.y) <= rr * rr) {
-          game.damageEnemy(e, p.dmg, p.x, p.y, p.kind === 'cannonball');
+          var res = game.damageEnemy(e, p.dmg, p.x, p.y, p.kind === 'cannonball');
           if (p.echo && G.Skills) G.Skills._echoOnHit(e, game, G.Skills.levelOf('echo'));
+          // 武器命中特效（冰霜 / 分裂 / 炎爆）
+          if (p.wx && G.WeaponFX) G.WeaponFX.onHit(p, e, game, res && res.crit);
+          // 暗影箭击杀 → 返还 0.1s 攻击冷却
+          if (p.shadow && e.dead) G.Player.attackTimer -= 0.1;
           if (p.hitSet) p.hitSet.push(e);
           if (p.pierce > 0) {
             p.pierce--;
+            if (p.pierceInc) p.dmg *= (1 + p.pierceInc);
             return false;
           }
           return true;
@@ -1683,6 +2132,7 @@ var G = require('../boot.js');
       }
     },
     draw: function (ctx, ox, oy) {
+      var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
       for (var i = 0; i < Proj.list.length; i++) {
         var p = Proj.list[i];
         var sx = p.x - ox, sy = p.y - oy;
@@ -1695,24 +2145,59 @@ var G = require('../boot.js');
           ctx.beginPath();
           ctx.arc(sx - p.size * 0.3, sy - p.size * 0.3, p.size * 0.4, 0, Math.PI * 2);
           ctx.fill();
-        } else {
-          // 拖尾
-          ctx.strokeStyle = p.color;
-          ctx.globalAlpha = 0.35;
-          ctx.lineWidth = p.size;
-          ctx.beginPath();
-          ctx.moveTo(sx - p.vx * 0.03, sy - p.vy * 0.03);
-          ctx.lineTo(sx, sy);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.arc(sx, sy, p.size, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.arc(sx, sy, p.size * 0.45, 0, Math.PI * 2);
-          ctx.fill();
+          continue;
+        }
+
+        var tier = p.wx ? p.wx.tier : -1;
+        var flame = tier === 4;
+        var shadow = p.kind === 'shadow';
+
+        // 拖尾
+        ctx.globalAlpha = (flame ? 0.6 : shadow ? 0.5 : 0.35) * Math.max(0.25, fa);
+        ctx.strokeStyle = flame ? '#ff8c42' : p.color;
+        ctx.lineWidth = p.size * (flame ? 1.9 : shadow ? 1.4 : 1);
+        ctx.beginPath();
+        ctx.moveTo(sx - p.vx * (flame ? 0.045 : 0.03), sy - p.vy * (flame ? 0.045 : 0.03));
+        ctx.lineTo(sx, sy);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // 箭头本体
+        ctx.fillStyle = flame ? '#ffd166' : p.color;
+        ctx.beginPath();
+        ctx.arc(sx, sy, p.size * (flame ? 1.15 : 1), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = flame ? '#fff3c4' : '#fff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, p.size * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 火焰 / 暗影装饰
+        if (fa > 0.2) {
+          if (flame) {
+            ctx.globalAlpha = 0.75 * fa;
+            ctx.fillStyle = '#ff6b3d';
+            var t = p.t * 22;
+            for (var k = 0; k < 3; k++) {
+              var sp2 = Math.sin(t + k * 2.1) * p.size * 1.3;
+              ctx.beginPath();
+              ctx.arc(sx - p.vx * 0.012 * (k + 1) + sp2 * 0.35, sy - p.vy * 0.012 * (k + 1) + sp2 * 0.25,
+                Math.max(1, p.size * (0.5 - k * 0.11)), 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+          } else if (shadow) {
+            ctx.globalAlpha = 0.7 * fa;
+            ctx.fillStyle = '#c07cf0';
+            var t2 = p.t * 26;
+            for (var m = 0; m < 2; m++) {
+              ctx.beginPath();
+              ctx.arc(sx + Math.sin(t2 + m * 3) * p.size, sy + Math.cos(t2 + m * 3) * p.size,
+                Math.max(1, p.size * 0.32), 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+          }
         }
       }
     },
@@ -1752,12 +2237,33 @@ var G = require('../boot.js');
       Player.face = 1;
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
       Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
+      // 武器战斗状态（灼烧/场效果/箭雨蓄能）
+      if (G.WeaponFX) G.WeaponFX.reset();
     },
 
     // ---- 派生属性：主角基础 × 局内三选一加成 ----
-    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1); },
+    attack: function () {
+      var a = Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1);
+      // 红色 5★【龙炎怒心】：生命每高于 10%，攻击力 +3%，最高 +30%
+      var ws = Player.proto.weapon;
+      if (ws && ws.dragon && Player.maxHp > 0) {
+        var over = (Player.hp / Player.maxHp - 0.1) / 0.9;
+        a *= 1 + Math.min(0.30, Math.max(0, over) * 0.30);
+      }
+      return a;
+    },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
     speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    // 暴击率：局内技能（每点 8%）+ 武器暴击率
+    critRate: function () {
+      var ws = Player.proto.weapon;
+      return U.clamp((Player.stats.crit || 0) * 0.08 + (ws ? (ws.crit || 0) : 0), 0, 0.85);
+    },
+    // 暴击倍率：基础 2 倍 + 武器暴击伤害加成
+    critMult: function () {
+      var ws = Player.proto.weapon;
+      return 2 * (1 + (ws ? (ws.critDmg || 0) : 0));
+    },
     // 主角面板 DPS（含暴击期望，不含多弹道），Boss/精英血量定价基准
     dps: function () {
       return Player.attack() * (1 + (Player.stats.crit || 0) * 0.08) / Player.interval();
@@ -1806,6 +2312,9 @@ var G = require('../boot.js');
     // 近战环斩（剑士）
     melee: function (game, target) {
       var range = Player.proto.range;
+      var ws = Player.proto.weapon;
+      var atk = Player.attack();
+      var fake = ws ? { wx: ws, atk0: atk, dmg: atk } : null;
       G.FX.ring(Player.x, Player.y, Player.proto.color, range, 0.22, 3);
       var near = game.grid.query(Player.x, Player.y, range + 30);
       var seen = {};
@@ -1816,7 +2325,8 @@ var G = require('../boot.js');
         seen[e.x + '_' + e.y] = 1;
         if (U.dist2(Player.x, Player.y, e.x, e.y) <= (range + e.r) * (range + e.r)) {
           var ang = U.angle(Player.x, Player.y, e.x, e.y);
-          game.damageEnemy(e, Player.attack(), e.x, e.y, false);
+          var res = game.damageEnemy(e, atk, e.x, e.y, false);
+          if (fake && G.WeaponFX) G.WeaponFX.onHit(fake, e, game, res && res.crit);
           G.FX.spray(e.x, e.y, ang, 3, '#ffd9a0', 130, 0.3, 3);
           hitAny = true;
         }
@@ -1829,14 +2339,25 @@ var G = require('../boot.js');
 
     // 远程射击（弓手/法师/牧师/炮手）
     shoot: function (game, target) {
+      var p = Player.proto;
+      var ws = p.weapon || null;
+      var atk = Player.attack();
+
+      // 红色 5★：蓄满 3 杀 → 这一发变成【焚天箭雨】
+      if (ws && ws.rainEvery && G.WeaponFX && G.WeaponFX.consumeRain()) {
+        Player.face = target.x >= Player.x ? 1 : -1;
+        G.WeaponFX.castRain(game, target, ws, atk);
+        return;
+      }
+
       var n = 1 + Player.stats.multi;
       var baseAng = U.angle(Player.x, Player.y, target.x, target.y);
       var spread = 0.14;
-      var p = Player.proto;
       var kind = 'bullet', color = p.color;
       if (Player.cls === 'mage') kind = 'fireball';
       else if (Player.cls === 'cannon') kind = 'cannonball';
       else if (Player.cls === 'priest') color = '#ffeaa7';
+      else if (ws && ws.tier >= 3) color = ws.tier === 4 ? '#ffb347' : '#a55eea';
       var size = 4 * (1 + Player.stats.bigshot * 0.3);
       if (kind === 'fireball') size += 2;
       if (kind === 'cannonball') size += 4;
@@ -1846,14 +2367,17 @@ var G = require('../boot.js');
           x: Player.x, y: Player.y - 6,
           ang: ang,
           speed: p.bulletSpeed || 560,
-          dmg: Player.attack(),
-          pierce: Player.stats.pierce,
+          dmg: atk,
+          pierce: Player.stats.pierce + (ws ? (ws.pierce || 0) : 0),
+          pierceInc: ws ? (ws.pierceInc || 0) : 0,
           size: size,
           color: color,
           friendly: true,
           splash: p.splash,
           life: (p.range + 60) / (p.bulletSpeed || 560),
-          kind: kind
+          kind: kind,
+          wx: ws,
+          atk0: atk
         });
       }
       Player.face = baseAng >= -Math.PI / 2 && baseAng <= Math.PI / 2 ? 1 : -1;
@@ -2504,7 +3028,9 @@ var G = require('../boot.js');
         atkT: U.rand(0.3, 1.0), // 攻击计时
         shootT: 0,
         vx: 0, vy: 0, wobT: Math.random() * 10,
-        stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0
+        stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0,
+        freezeT: 0, chillT: 0, chillSlow: 0.4, chillAspd: 0.2,
+        burnT: 0, burnN: 0, burnDps: 0, burnFx: 0
       };
       if (opts.elite) {
         e.elite = true;
@@ -2544,6 +3070,26 @@ var G = require('../boot.js');
         if (e.orbT > 0) e.orbT -= dt;
         if (e.slowT > 0) e.slowT -= dt;
         if (e.stunT > 0) e.stunT -= dt;
+        if (e.freezeT > 0) e.freezeT -= dt;
+        if (e.chillT > 0) e.chillT -= dt;
+
+        // 灼烧（武器火焰效果）：持续掉血，可被烧死
+        if (e.burnT > 0) {
+          e.burnT -= dt;
+          var bd = (e.burnN || 0) * (e.burnDps || 0) * dt;
+          if (bd > 0) e.hp -= bd;
+          e.burnFx = (e.burnFx || 0) + dt;
+          if (e.burnFx > 0.5) {
+            e.burnFx = 0;
+            var tickDmg = (e.burnN || 0) * (e.burnDps || 0) * 0.5;
+            if (tickDmg >= 1) G.FX.text(e.x + U.rand(-7, 7), e.y - e.r - 3, String(Math.round(tickDmg)), '#ff9f43', 10);
+          }
+          if (e.hp <= 0) {
+            e.hp = 0;
+            Enemy.damage(game, e, 0, e.x, e.y, false, false, true);
+          }
+          if (e.dead) continue;
+        }
         // 击退
         if (e.kbX || e.kbY) {
           e.x += (e.kbX || 0) * dt;
@@ -2598,8 +3144,11 @@ var G = require('../boot.js');
           }
         }
 
-        var sp = e.speed * (e.slowT > 0 ? 0.55 : 1);
-        if (e.stunT <= 0) {
+        // 寒霜：移速降低；冻结/眩晕：完全不能动
+        var chilled = e.chillT > 0;
+        var frozen = e.freezeT > 0 || e.stunT > 0;
+        var sp = e.speed * (e.slowT > 0 ? 0.55 : 1) * (chilled ? (1 - (e.chillSlow || 0.4)) : 1);
+        if (!frozen) {
           if (d > stopDist) {
             e.x += (dx / d * sp + sepX) * dt;
             e.y += (dy / d * sp + sepY) * dt;
@@ -2608,9 +3157,9 @@ var G = require('../boot.js');
           }
         }
 
-        // 攻击（眩晕时不攻击）
-        e.atkT -= dt;
-        if (e.atkT <= 0 && e.stunT <= 0) {
+        // 攻击（眩晕/冻结时不攻击；寒霜降低攻击频率）
+        e.atkT -= dt * (chilled ? (1 - (e.chillAspd || 0.2)) : 1);
+        if (e.atkT <= 0 && !frozen) {
           if (targetingPlayer && d <= targetR + 6) {
             e.atkT = 1.0;
             pl.damage(e.dmg, game);
@@ -2625,7 +3174,7 @@ var G = require('../boot.js');
         }
 
         // 远程敌人射击
-        if (sh && sh.shootRange && !pl.dead && e.stunT <= 0) {
+        if (sh && sh.shootRange && !pl.dead && !frozen) {
           e.shootT -= dt;
           if (e.shootT <= 0 && dPlayer < sh.shootRange * sh.shootRange) {
             e.shootT = sh.shootInterval;
@@ -2655,17 +3204,19 @@ var G = require('../boot.js');
       }
     },
 
-    damage: function (game, e, dmg, hx, hy, big, crit) {
+    damage: function (game, e, dmg, hx, hy, big, crit, silent) {
       if (e.dead) return;
       // 暴击判定在调用方处理，这里直接扣血
       e.hp -= dmg;
       e.hitT = 0.12;
-      // 伤害飘字：暴击更大更红，重击（炮/爆）稍大
-      var txtSize = big ? 15 : 12;
-      var txtColor = '#fff';
-      if (crit) { txtSize = big ? 21 : 19; txtColor = '#ff4d4d'; }
-      G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), txtColor, txtSize, !!crit);
-      G.FX.spray(e.x, e.y, Math.atan2(e.y - (hy || e.y), e.x - (hx || e.x)) + Math.PI, big ? 6 : 3, e.color, 130, 0.35, 3);
+      if (!silent) {
+        // 伤害飘字：暴击更大更红，重击（炮/爆）稍大
+        var txtSize = big ? 15 : 12;
+        var txtColor = '#fff';
+        if (crit) { txtSize = big ? 21 : 19; txtColor = '#ff4d4d'; }
+        G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), txtColor, txtSize, !!crit);
+        G.FX.spray(e.x, e.y, Math.atan2(e.y - (hy || e.y), e.x - (hx || e.x)) + Math.PI, big ? 6 : 3, e.color, 130, 0.35, 3);
+      }
       if (e.hp <= 0) {
         e.dead = true;
         G.Audio.play('kill');
@@ -2744,8 +3295,37 @@ var G = require('../boot.js');
           ctx.fillText('👑', sx, sy - e.r - 6);
         }
 
+        // 冻结 / 寒霜（冰霜武器）
+        if (e.freezeT > 0) {
+          ctx.fillStyle = 'rgba(200,240,255,0.26)';
+          ctx.beginPath(); ctx.arc(sx, sy, e.r + 2, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(170,235,255,0.95)';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(sx, sy, e.r + 3, 0, Math.PI * 2); ctx.stroke();
+        } else if (e.chillT > 0) {
+          ctx.strokeStyle = 'rgba(143,216,255,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(sx, sy, e.r + 2.5, 0, Math.PI * 2); ctx.stroke();
+        }
+
+        // 灼烧火苗（火焰武器）
+        if (e.burnT > 0 && e.burnN > 0) {
+          var ffa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+          ctx.globalAlpha = 0.8 * ffa;
+          var bn = Math.min(3, e.burnN);
+          for (var bi = 0; bi < bn; bi++) {
+            var bx2 = sx + Math.sin(t * 9 + bi * 2.1) * e.r * 0.55;
+            var by2 = sy - e.r - 3 - ((t * 26 + bi * 11) % 14);
+            ctx.fillStyle = bi % 2 ? '#ffb347' : '#ff6b3d';
+            ctx.beginPath();
+            ctx.arc(bx2, by2, 2.4 - bi * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+
         // 眩晕标记
-        if (e.stunT > 0) {
+        if (e.stunT > 0 && e.freezeT <= 0) {
           ctx.font = '12px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText('✦', sx, sy - e.r - 12);
@@ -4206,10 +4786,11 @@ var G = require('../boot.js');
         ctx.font = 'bold 14px sans-serif';
         ctx.fillStyle = G.Weapon.tierOf(eq).color;
         ctx.fillText(G.Weapon.label(eq), 24, barY + 36);
+        var wsE = G.Weapon.stats(eq) || { atk: 0, aspd: 0, crit: 0 };
         ctx.textAlign = 'right';
         ctx.font = 'bold 13px sans-serif';
         ctx.fillStyle = '#7bed9f';
-        ctx.fillText('攻击 +' + Math.round((G.Weapon.bonus(eq) - 1) * 100) + '%', W - 24, barY + 29);
+        ctx.fillText('攻 +' + Math.round(wsE.atk * 100) + '%  速 +' + Math.round(wsE.aspd * 100) + '%  暴 +' + Math.round((wsE.crit || 0) * 100) + '%', W - 24, barY + 29);
       } else {
         ctx.font = '13px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
@@ -5292,19 +5873,23 @@ var G = require('./boot.js');
     },
 
     damageEnemy: function (e, dmg, hx, hy, big) {
-      // 暴击
-      var crit = Math.random() < (G.Player.stats.crit * 0.08);
-      if (crit) dmg *= 2;
+      // 暴击：局内技能 + 武器暴击率；倍率含武器暴击伤害
+      var crit = Math.random() < G.Player.critRate();
+      if (crit) dmg *= G.Player.critMult();
+      // 灼烧易伤（红色 3★+：被点燃的目标受到的所有伤害 +15%）
+      if (G.WeaponFX) dmg *= G.WeaponFX.vulnMult(e);
       G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
       var leech = G.Player.stats.leech * 0.02;
       if (leech > 0) G.Player.heal(dmg * leech * 0.5);
       if (crit) G.FX.ring(e.x, e.y, '#ffd700', 22, 0.25, 2);
+      return { crit: crit, dmg: dmg };
     },
 
     onKill: function (e) {
       Game.kills++;
       G.Skills.onKill(e, Game);
+      if (G.WeaponFX) G.WeaponFX.onKill(e, Game);   // 回血 / 灼烧传染 / 箭雨蓄能
       if (e.boss) {
         Game.showMsg('BOSS 击败！', '#ffd700', 2);
         G.Camera.shake(8, 0.4);
@@ -5532,6 +6117,7 @@ var G = require('./boot.js');
       G.Enemy.update(dt, Game);
       G.Hero.update(dt, Game);
       G.Proj.update(dt, Game);
+      if (G.WeaponFX) G.WeaponFX.update(dt, Game);
       G.Pickup.update(dt, Game);
       G.Skills.update(dt, Game);
       G.FX.update(dt);
@@ -5575,6 +6161,7 @@ var G = require('./boot.js');
       G.Enemy.draw(ctx, ox, oy);
       G.Player.draw(ctx, ox, oy);
       G.Skills.draw(ctx, ox, oy);
+      if (G.WeaponFX) G.WeaponFX.draw(ctx, ox, oy);
       G.Proj.draw(ctx, ox, oy);
       G.FX.draw(ctx, ox, oy);
       // 拖拽合成预览
@@ -5633,6 +6220,7 @@ try {
   __req("", "./js/config/data.js");
   __req("", "./js/core/meta.js");
   __req("", "./js/core/weapon.js");
+  __req("", "./js/systems/weaponfx.js");
   __req("", "./js/core/bg.js");
   __req("", "./js/entities/fx.js");
   __req("", "./js/entities/pickup.js");

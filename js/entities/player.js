@@ -27,12 +27,33 @@ var G = require('../boot.js');
       Player.face = 1;
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
       Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
+      // 武器战斗状态（灼烧/场效果/箭雨蓄能）
+      if (G.WeaponFX) G.WeaponFX.reset();
     },
 
     // ---- 派生属性：主角基础 × 局内三选一加成 ----
-    attack: function () { return Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1); },
+    attack: function () {
+      var a = Player.proto.dmg * (1 + Player.stats.atk * 0.2) * (1 + Player.stats.bigshot * 0.08) * (1 + Player.stats.waveAtk) * (G.Skills ? G.Skills.dmgMult() : 1);
+      // 红色 5★【龙炎怒心】：生命每高于 10%，攻击力 +3%，最高 +30%
+      var ws = Player.proto.weapon;
+      if (ws && ws.dragon && Player.maxHp > 0) {
+        var over = (Player.hp / Player.maxHp - 0.1) / 0.9;
+        a *= 1 + Math.min(0.30, Math.max(0, over) * 0.30);
+      }
+      return a;
+    },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
     speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    // 暴击率：局内技能（每点 8%）+ 武器暴击率
+    critRate: function () {
+      var ws = Player.proto.weapon;
+      return U.clamp((Player.stats.crit || 0) * 0.08 + (ws ? (ws.crit || 0) : 0), 0, 0.85);
+    },
+    // 暴击倍率：基础 2 倍 + 武器暴击伤害加成
+    critMult: function () {
+      var ws = Player.proto.weapon;
+      return 2 * (1 + (ws ? (ws.critDmg || 0) : 0));
+    },
     // 主角面板 DPS（含暴击期望，不含多弹道），Boss/精英血量定价基准
     dps: function () {
       return Player.attack() * (1 + (Player.stats.crit || 0) * 0.08) / Player.interval();
@@ -81,6 +102,9 @@ var G = require('../boot.js');
     // 近战环斩（剑士）
     melee: function (game, target) {
       var range = Player.proto.range;
+      var ws = Player.proto.weapon;
+      var atk = Player.attack();
+      var fake = ws ? { wx: ws, atk0: atk, dmg: atk } : null;
       G.FX.ring(Player.x, Player.y, Player.proto.color, range, 0.22, 3);
       var near = game.grid.query(Player.x, Player.y, range + 30);
       var seen = {};
@@ -91,7 +115,8 @@ var G = require('../boot.js');
         seen[e.x + '_' + e.y] = 1;
         if (U.dist2(Player.x, Player.y, e.x, e.y) <= (range + e.r) * (range + e.r)) {
           var ang = U.angle(Player.x, Player.y, e.x, e.y);
-          game.damageEnemy(e, Player.attack(), e.x, e.y, false);
+          var res = game.damageEnemy(e, atk, e.x, e.y, false);
+          if (fake && G.WeaponFX) G.WeaponFX.onHit(fake, e, game, res && res.crit);
           G.FX.spray(e.x, e.y, ang, 3, '#ffd9a0', 130, 0.3, 3);
           hitAny = true;
         }
@@ -104,14 +129,25 @@ var G = require('../boot.js');
 
     // 远程射击（弓手/法师/牧师/炮手）
     shoot: function (game, target) {
+      var p = Player.proto;
+      var ws = p.weapon || null;
+      var atk = Player.attack();
+
+      // 红色 5★：蓄满 3 杀 → 这一发变成【焚天箭雨】
+      if (ws && ws.rainEvery && G.WeaponFX && G.WeaponFX.consumeRain()) {
+        Player.face = target.x >= Player.x ? 1 : -1;
+        G.WeaponFX.castRain(game, target, ws, atk);
+        return;
+      }
+
       var n = 1 + Player.stats.multi;
       var baseAng = U.angle(Player.x, Player.y, target.x, target.y);
       var spread = 0.14;
-      var p = Player.proto;
       var kind = 'bullet', color = p.color;
       if (Player.cls === 'mage') kind = 'fireball';
       else if (Player.cls === 'cannon') kind = 'cannonball';
       else if (Player.cls === 'priest') color = '#ffeaa7';
+      else if (ws && ws.tier >= 3) color = ws.tier === 4 ? '#ffb347' : '#a55eea';
       var size = 4 * (1 + Player.stats.bigshot * 0.3);
       if (kind === 'fireball') size += 2;
       if (kind === 'cannonball') size += 4;
@@ -121,14 +157,17 @@ var G = require('../boot.js');
           x: Player.x, y: Player.y - 6,
           ang: ang,
           speed: p.bulletSpeed || 560,
-          dmg: Player.attack(),
-          pierce: Player.stats.pierce,
+          dmg: atk,
+          pierce: Player.stats.pierce + (ws ? (ws.pierce || 0) : 0),
+          pierceInc: ws ? (ws.pierceInc || 0) : 0,
           size: size,
           color: color,
           friendly: true,
           splash: p.splash,
           life: (p.range + 60) / (p.bulletSpeed || 560),
-          kind: kind
+          kind: kind,
+          wx: ws,
+          atk0: atk
         });
       }
       Player.face = baseAng >= -Math.PI / 2 && baseAng <= Math.PI / 2 ? 1 : -1;

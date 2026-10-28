@@ -961,10 +961,11 @@ var G = require('../boot.js');
         ctx.font = 'bold 14px sans-serif';
         ctx.fillStyle = G.Weapon.tierOf(eq).color;
         ctx.fillText(G.Weapon.label(eq), 24, barY + 36);
+        var wsE = G.Weapon.stats(eq) || { atk: 0, aspd: 0, crit: 0 };
         ctx.textAlign = 'right';
         ctx.font = 'bold 13px sans-serif';
         ctx.fillStyle = '#7bed9f';
-        ctx.fillText('攻击 +' + Math.round((G.Weapon.bonus(eq) - 1) * 100) + '%', W - 24, barY + 29);
+        ctx.fillText('攻 +' + Math.round(wsE.atk * 100) + '%  速 +' + Math.round(wsE.aspd * 100) + '%  暴 +' + Math.round((wsE.crit || 0) * 100) + '%', W - 24, barY + 29);
       } else {
         ctx.font = '13px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.4)';

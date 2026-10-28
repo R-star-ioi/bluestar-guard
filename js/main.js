@@ -347,19 +347,23 @@ var G = require('./boot.js');
     },
 
     damageEnemy: function (e, dmg, hx, hy, big) {
-      // 暴击
-      var crit = Math.random() < (G.Player.stats.crit * 0.08);
-      if (crit) dmg *= 2;
+      // 暴击：局内技能 + 武器暴击率；倍率含武器暴击伤害
+      var crit = Math.random() < G.Player.critRate();
+      if (crit) dmg *= G.Player.critMult();
+      // 灼烧易伤（红色 3★+：被点燃的目标受到的所有伤害 +15%）
+      if (G.WeaponFX) dmg *= G.WeaponFX.vulnMult(e);
       G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
       var leech = G.Player.stats.leech * 0.02;
       if (leech > 0) G.Player.heal(dmg * leech * 0.5);
       if (crit) G.FX.ring(e.x, e.y, '#ffd700', 22, 0.25, 2);
+      return { crit: crit, dmg: dmg };
     },
 
     onKill: function (e) {
       Game.kills++;
       G.Skills.onKill(e, Game);
+      if (G.WeaponFX) G.WeaponFX.onKill(e, Game);   // 回血 / 灼烧传染 / 箭雨蓄能
       if (e.boss) {
         Game.showMsg('BOSS 击败！', '#ffd700', 2);
         G.Camera.shake(8, 0.4);
@@ -587,6 +591,7 @@ var G = require('./boot.js');
       G.Enemy.update(dt, Game);
       G.Hero.update(dt, Game);
       G.Proj.update(dt, Game);
+      if (G.WeaponFX) G.WeaponFX.update(dt, Game);
       G.Pickup.update(dt, Game);
       G.Skills.update(dt, Game);
       G.FX.update(dt);
@@ -630,6 +635,7 @@ var G = require('./boot.js');
       G.Enemy.draw(ctx, ox, oy);
       G.Player.draw(ctx, ox, oy);
       G.Skills.draw(ctx, ox, oy);
+      if (G.WeaponFX) G.WeaponFX.draw(ctx, ox, oy);
       G.Proj.draw(ctx, ox, oy);
       G.FX.draw(ctx, ox, oy);
       // 拖拽合成预览

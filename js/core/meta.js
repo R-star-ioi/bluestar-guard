@@ -189,16 +189,22 @@ var G = require('../boot.js');
       var lv = Meta.levelOf(cls);
       var k = lv - 1;
       var B = D.META.BONUS;
-      var wb = (G.Weapon ? G.Weapon.attackBonus(cls) : 1);   // 已装备武器加成
+      var ws = (G.Weapon ? G.Weapon.statsOf(cls) : null);   // 已装备武器的战斗属性
+      var wAtk = ws ? (1 + ws.atk) * (1 + (ws.alldmg || 0)) : 1;
+      var wAspd = ws ? (1 + ws.aspd) : 1;
+      var wRange = ws ? (ws.range || 1) : 1;
       var st = {
         cls: cls, name: p.name, color: p.color, desc: p.desc, level: lv,
         maxHp: Math.round(p.hp * (1 + B.hp * k)),
-        dmg: p.dmg * (1 + B.dmg * k) * wb,
-        interval: p.interval * (1 - B.aspeed * k),
+        dmg: p.dmg * (1 + B.dmg * k) * wAtk,
+        interval: p.interval * (1 - B.aspeed * k) / wAspd,
         speed: p.speed * (1 + B.speed * k),
-        range: p.range, bulletSpeed: p.bulletSpeed || 0,
+        range: p.range * wRange, bulletSpeed: p.bulletSpeed || 0,
         splash: p.splash || 0, melee: !!p.melee,
-        regen: p.regenBase ? p.regenBase + p.regenPerLv * k : 0
+        regen: p.regenBase ? p.regenBase + p.regenPerLv * k : 0,
+        weapon: ws,
+        wcrit: ws ? (ws.crit || 0) : 0,
+        wcritDmg: ws ? (ws.critDmg || 0) : 0
       };
       return st;
     }

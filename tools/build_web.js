@@ -14,6 +14,7 @@ var FILES = [
   'js/config/data.js',
   'js/core/meta.js',
   'js/core/weapon.js',
+  'js/systems/weaponfx.js',
   'js/core/bg.js',
   'js/entities/fx.js',
   'js/entities/pickup.js',
