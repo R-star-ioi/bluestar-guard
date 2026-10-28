@@ -251,6 +251,8 @@ var G = require('./boot.js');
     damageBase: function (dmg) {
       var b = Game.base;
       if (!b || b.hp <= 0) return;
+      // 世界吞噬者存活期间：基地每次受击只扣 1hp（专心走位躲 Boss，不用兼顾基地）
+      if (G.Devourer && G.Devourer.active) dmg = 1;
       b.hp -= dmg;
       G.Audio.play('crystal');
       G.Camera.shake(3, 0.15);
