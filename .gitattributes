@@ -1,0 +1,12 @@
+# 换行统一：仓库里一律存 LF，检出时按本机 core.autocrlf 决定（Windows 得到 CRLF）
+# 目的：避免 API / 网页端写入 LF、本地写入 CRLF 造成"整文件冲突"的假冲突
+* text=auto
+
+# 二进制，别做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.mp3 binary
+*.wav binary
+*.zip binary
