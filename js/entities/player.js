@@ -188,30 +188,34 @@ var G = require('../boot.js');
       var ex = sx + Player.face * 4;
       ctx.fillRect(ex - 3.5, sy - 4 + bob, 3, 3.5);
       ctx.fillRect(ex + 1.5, sy - 4 + bob, 3, 3.5);
-      // 武器
-      if (Player.proto && Player.proto.melee) {
-        // 剑
-        ctx.strokeStyle = '#e8eef4';
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(sx + Player.face * 8, sy + 4 + bob);
-        ctx.lineTo(sx + Player.face * 22, sy - 10 + bob);
-        ctx.stroke();
-        ctx.strokeStyle = '#c9a227';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(sx + Player.face * 6, sy + 1 + bob);
-        ctx.lineTo(sx + Player.face * 13, sy - 6 + bob);
-        ctx.stroke();
-      } else {
-        // 枪/法杖
-        ctx.strokeStyle = Player.cls === 'mage' ? '#8e44ad' : (Player.cls === 'priest' ? '#d4b106' : '#cfd8dc');
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.moveTo(sx + Player.face * 6, sy + bob);
-        ctx.lineTo(sx + Player.face * 17, sy - 2 + bob);
-        ctx.stroke();
+      // 武器：装了武器就画武器图（握在身前侧），没装就画职业默认的矢量武器
+      var eqw = (G.Weapon ? G.Weapon.equipped(Player.cls) : null);
+      var drewEq = eqw ? G.Weapon.drawHeld(ctx, sx + Player.face * 14, sy + bob, 46, eqw, Player.face * 0.12) : false;
+      if (!drewEq) {
+        if (Player.proto && Player.proto.melee) {
+          // 剑
+          ctx.strokeStyle = '#e8eef4';
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx + Player.face * 8, sy + 4 + bob);
+          ctx.lineTo(sx + Player.face * 22, sy - 10 + bob);
+          ctx.stroke();
+          ctx.strokeStyle = '#c9a227';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(sx + Player.face * 6, sy + 1 + bob);
+          ctx.lineTo(sx + Player.face * 13, sy - 6 + bob);
+          ctx.stroke();
+        } else {
+          // 枪/法杖
+          ctx.strokeStyle = Player.cls === 'mage' ? '#8e44ad' : (Player.cls === 'priest' ? '#d4b106' : '#cfd8dc');
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(sx + Player.face * 6, sy + bob);
+          ctx.lineTo(sx + Player.face * 17, sy - 2 + bob);
+          ctx.stroke();
+        }
       }
     }
   };

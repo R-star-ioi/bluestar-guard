@@ -691,6 +691,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.8', title: '武器外观', lines: ['装备的武器会显示在角色手上（按品质取图，紫/红带光晕）', '武器图新增透明底版本，游戏内用抠图、卡面用带背景版'] },
     { ver: 'v0.5.7', title: '兑换码', lines: ['设置页新增兑换码输入', 'lxsw666 → 99999 钻石（每个码只能用一次）'] },
     { ver: 'v0.5.6', title: '武器与抽卡', lines: ['英雄页新增「武器」按钮，可装备/卸下（目前开放弓手）', '主界面新增「背包」与「抽武器」', '品质白→绿→蓝→紫→红，三个同阶合一阶，两个同星红合高一星', '抽卡 60 钻/次：白80% 绿10% 蓝6% 紫3% 红1%，带翻卡动画'] },
     { ver: 'v0.5.5', title: '战斗手感与设置', lines: ['暴击伤害数字更大更红', '17-20 波敌人更硬，关卡之间落差更明显', '清波提示分两行显示', '修复拖拽同名同级英雄无法合成', '新增设置：特效强度滑条（主界面右下角 ⚙️ / 暂停菜单）'] },
@@ -726,7 +727,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.7';
+  D.VERSION = 'v0.5.8';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -975,6 +976,41 @@ var G = require('../boot.js');
 
     img: function (cls, tier) {
       return G.P.loadImage('assets/weapons/' + cls + '_' + TIERS[tier].key + '.png');
+    },
+    // 抠掉背景的武器本体（游戏里手持用）
+    heldImg: function (cls, tier) {
+      return G.P.loadImage('assets/weapons/' + cls + '_' + TIERS[tier].key + '_cut.png');
+    },
+
+    // 在角色身上画手持武器；h = 显示高度（px）。返回是否真的画了
+    drawHeld: function (ctx, cx, cy, h, w, rot) {
+      if (!w) return false;
+      var rec = Weapon.heldImg(w.cls, w.tier);
+      if (!rec || !rec.ready || !rec.img) return false;
+      var img = rec.img;
+      var iw = img.width || h, ih = img.height || h;
+      var dh = h, dw = iw * (h / ih);
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (rot) ctx.rotate(rot);
+      // 紫/红品质带一点光晕，跟着特效强度走
+      if (w.tier >= 3) {
+        var T = TIERS[w.tier];
+        var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+        var pulse = 0.55 + 0.35 * Math.sin(Date.now() / 320);
+        var rr = Math.max(dw, dh) * 0.62;
+        var g = ctx.createRadialGradient(0, 0, 1, 0, 0, rr);
+        g.addColorStop(0, T.glow);
+        g.addColorStop(0.55, T.glow.replace(/[\d.]+\)$/, '0.22)'));
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = pulse * (h < 36 ? 0.35 : 0.55) * fa;
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+      return true;
     },
 
     label: function (w) {
@@ -1863,30 +1899,34 @@ var G = require('../boot.js');
       var ex = sx + Player.face * 4;
       ctx.fillRect(ex - 3.5, sy - 4 + bob, 3, 3.5);
       ctx.fillRect(ex + 1.5, sy - 4 + bob, 3, 3.5);
-      // 武器
-      if (Player.proto && Player.proto.melee) {
-        // 剑
-        ctx.strokeStyle = '#e8eef4';
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(sx + Player.face * 8, sy + 4 + bob);
-        ctx.lineTo(sx + Player.face * 22, sy - 10 + bob);
-        ctx.stroke();
-        ctx.strokeStyle = '#c9a227';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(sx + Player.face * 6, sy + 1 + bob);
-        ctx.lineTo(sx + Player.face * 13, sy - 6 + bob);
-        ctx.stroke();
-      } else {
-        // 枪/法杖
-        ctx.strokeStyle = Player.cls === 'mage' ? '#8e44ad' : (Player.cls === 'priest' ? '#d4b106' : '#cfd8dc');
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.moveTo(sx + Player.face * 6, sy + bob);
-        ctx.lineTo(sx + Player.face * 17, sy - 2 + bob);
-        ctx.stroke();
+      // 武器：装了武器就画武器图（握在身前侧），没装就画职业默认的矢量武器
+      var eqw = (G.Weapon ? G.Weapon.equipped(Player.cls) : null);
+      var drewEq = eqw ? G.Weapon.drawHeld(ctx, sx + Player.face * 14, sy + bob, 46, eqw, Player.face * 0.12) : false;
+      if (!drewEq) {
+        if (Player.proto && Player.proto.melee) {
+          // 剑
+          ctx.strokeStyle = '#e8eef4';
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx + Player.face * 8, sy + 4 + bob);
+          ctx.lineTo(sx + Player.face * 22, sy - 10 + bob);
+          ctx.stroke();
+          ctx.strokeStyle = '#c9a227';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(sx + Player.face * 6, sy + 1 + bob);
+          ctx.lineTo(sx + Player.face * 13, sy - 6 + bob);
+          ctx.stroke();
+        } else {
+          // 枪/法杖
+          ctx.strokeStyle = Player.cls === 'mage' ? '#8e44ad' : (Player.cls === 'priest' ? '#d4b106' : '#cfd8dc');
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(sx + Player.face * 6, sy + bob);
+          ctx.lineTo(sx + Player.face * 17, sy - 2 + bob);
+          ctx.stroke();
+        }
       }
     }
   };
@@ -2960,6 +3000,7 @@ var G = require('../boot.js');
         ctx.ellipse(sx, sy + 13, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
+        // 已装备武器：握在右手边（画在身体前面，握把压住身体边缘）
         // 底座
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.strokeStyle = c.color;
@@ -2970,6 +3011,12 @@ var G = require('../boot.js');
 
         // 职业图标（矢量绘制，不依赖 emoji 字体）
         Hero.drawIcon(ctx, h.cls, sx, sy + bob - 2);
+
+        // 已装备武器：挎在右手边（贴着身体外侧，不挡图标）
+        if (G.Weapon) {
+          var eqw = G.Weapon.equipped(h.cls);
+          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25);
+        }
 
         // 等级徽章
         ctx.fillStyle = c.color;
@@ -4899,7 +4946,12 @@ var G = require('./boot.js');
       G.Input.init();
       G.Meta.load();
       // 预载武器图，避免第一次打开武器页/抽卡时闪白
-      if (G.Weapon) { for (var ti = 0; ti <= 4; ti++) G.Weapon.img('archer', ti); }
+      if (G.Weapon) {
+        for (var ti = 0; ti <= 4; ti++) {
+          G.Weapon.img('archer', ti);
+          G.Weapon.heldImg('archer', ti);   // 手持用的抠图
+        }
+      }
       Game.best = G.P.storage.get('lx_best', { lv: 1, wv: 0 });
       if (Game.best.wave !== undefined) { Game.best = { lv: 1, wv: 0 }; }
       var snd = G.P.storage.get('lx_sound', 1);

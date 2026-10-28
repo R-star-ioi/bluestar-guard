@@ -27,6 +27,41 @@ var G = require('../boot.js');
     img: function (cls, tier) {
       return G.P.loadImage('assets/weapons/' + cls + '_' + TIERS[tier].key + '.png');
     },
+    // 抠掉背景的武器本体（游戏里手持用）
+    heldImg: function (cls, tier) {
+      return G.P.loadImage('assets/weapons/' + cls + '_' + TIERS[tier].key + '_cut.png');
+    },
+
+    // 在角色身上画手持武器；h = 显示高度（px）。返回是否真的画了
+    drawHeld: function (ctx, cx, cy, h, w, rot) {
+      if (!w) return false;
+      var rec = Weapon.heldImg(w.cls, w.tier);
+      if (!rec || !rec.ready || !rec.img) return false;
+      var img = rec.img;
+      var iw = img.width || h, ih = img.height || h;
+      var dh = h, dw = iw * (h / ih);
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (rot) ctx.rotate(rot);
+      // 紫/红品质带一点光晕，跟着特效强度走
+      if (w.tier >= 3) {
+        var T = TIERS[w.tier];
+        var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+        var pulse = 0.55 + 0.35 * Math.sin(Date.now() / 320);
+        var rr = Math.max(dw, dh) * 0.62;
+        var g = ctx.createRadialGradient(0, 0, 1, 0, 0, rr);
+        g.addColorStop(0, T.glow);
+        g.addColorStop(0.55, T.glow.replace(/[\d.]+\)$/, '0.22)'));
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = pulse * (h < 36 ? 0.35 : 0.55) * fa;
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+      return true;
+    },
 
     label: function (w) {
       if (!w) return '未装备';

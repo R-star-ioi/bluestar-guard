@@ -34,7 +34,12 @@ var G = require('./boot.js');
       G.Input.init();
       G.Meta.load();
       // 预载武器图，避免第一次打开武器页/抽卡时闪白
-      if (G.Weapon) { for (var ti = 0; ti <= 4; ti++) G.Weapon.img('archer', ti); }
+      if (G.Weapon) {
+        for (var ti = 0; ti <= 4; ti++) {
+          G.Weapon.img('archer', ti);
+          G.Weapon.heldImg('archer', ti);   // 手持用的抠图
+        }
+      }
       Game.best = G.P.storage.get('lx_best', { lv: 1, wv: 0 });
       if (Game.best.wave !== undefined) { Game.best = { lv: 1, wv: 0 }; }
       var snd = G.P.storage.get('lx_sound', 1);
