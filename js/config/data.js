@@ -211,6 +211,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.3', title: '宝箱按关卡独立', lines: ['每关的宝箱各自记录，通关别关不再串状态', '重打本关只增不减，已领取的不会复活', '切换关卡时显示该关自己的宝箱'] },
     { ver: 'v0.5.2', title: '主菜单排版修复', lines: ['标题区独立排版，水晶徽记不再被选关卡片遮挡', '徽记改为矢量绘制，不依赖 emoji', '矮屏下按钮与说明文字自动收紧，不再重叠'] },
     { ver: 'v0.5.1', title: '宝箱与资源展示优化', lines: ['通关宝箱改为回主界面领取 领取后显示已打开状态', '钻石与金币移至右上角资源栏', '1-50关均可预览 未通关前关则开始按钮锁定'] },
     { ver: 'v0.5.0', title: '关卡系统上线', lines: ['50个关卡，每关20波，通关开宝箱', '主界面左右箭头选关，逐关解锁', '新增钻石：满血通关300钻/≥70%150钻/保底50钻'] },
@@ -239,6 +240,6 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.2';
+  D.VERSION = 'v0.5.3';
   G.D = D;
 })();

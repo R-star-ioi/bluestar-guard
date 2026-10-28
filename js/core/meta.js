@@ -2,6 +2,30 @@
 var G = require('../boot.js');
 (function () {
   var U = G.U, D = G.D;
+  // 存档兼容：旧版只有一条 {level, boxes, claimed}，按它记录的关卡归档进新结构
+  function normalizeChests(raw) {
+    var out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    function put(lv, rec) {
+      lv = parseInt(lv, 10);
+      if (!lv || lv < 1) return;
+      var boxes = [false, false, false], claimed = [false, false, false];
+      for (var i = 0; i < 3; i++) {
+        boxes[i] = !!(rec && rec.boxes && rec.boxes[i]);
+        claimed[i] = boxes[i] && !!(rec && rec.claimed && rec.claimed[i]);
+      }
+      out[lv] = { boxes: boxes, claimed: claimed };
+    }
+    if (raw.level !== undefined) {
+      put(raw.level, raw);                       // 旧格式：单条记录
+    } else {
+      for (var k in raw) {
+        if (raw.hasOwnProperty(k) && isFinite(k)) put(k, raw[k]);
+      }
+    }
+    return out;
+  }
+
   var Meta = {
     gold: 0,                          // 升级金币（局外钱包）
     unlocked: { archer: true },
@@ -10,7 +34,9 @@ var G = require('../boot.js');
     diamonds: 0,                      // 钻石（通关宝箱奖励）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
-    chests: { level: 0, boxes: [false, false, false], claimed: [false, false, false] }, // 主界面领取的宝箱
+    // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
+    // boxes[i]=该档是否达成；claimed[i]=该档是否已领取。重打同一关只增不减，已领取不复活。
+    chests: {},
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -22,7 +48,7 @@ var G = require('../boot.js');
         Meta.diamonds = m.diamonds || 0;
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
-        if (m.chests) Meta.chests = m.chests;
+        Meta.chests = normalizeChests(m.chests);
       }
     },
     save: function () {
@@ -39,14 +65,32 @@ var G = require('../boot.js');
       Meta.save();
     },
 
-    // 通关后把宝箱放回主界面待领
+    // 通关后把宝箱放回主界面待领（每关各一份，互不影响）
     setChests: function (level, boxes) {
-      Meta.chests = { level: level, boxes: boxes, claimed: [false, false, false] };
+      var rec = Meta.chests[level];
+      if (!rec) {
+        rec = { boxes: [false, false, false], claimed: [false, false, false] };
+        Meta.chests[level] = rec;
+      }
+      // 重打本关只增不减：这次打得差不会取消已达成档位，已领取的也不会复活
+      for (var i = 0; i < 3; i++) if (boxes[i]) rec.boxes[i] = true;
       Meta.save();
     },
-    // 在主界面领取宝箱，返回获得的钻石（0=不可领）
-    claimChest: function (i) {
-      var c = Meta.chests;
+    // 某关的宝箱记录（没通关过返回 null）
+    chestOf: function (level) {
+      return Meta.chests[level] || null;
+    },
+    // 某关还没领的宝箱数量
+    pendingChests: function (level) {
+      var c = Meta.chests[level];
+      if (!c) return 0;
+      var n = 0;
+      for (var i = 0; i < 3; i++) if (c.boxes[i] && !c.claimed[i]) n++;
+      return n;
+    },
+    // 领取某关的某个宝箱，返回钻石（0=不可领）
+    claimChest: function (level, i) {
+      var c = Meta.chests[level];
       if (!c || !c.boxes[i] || c.claimed[i]) return 0;
       c.claimed[i] = true;
       var amt = D.LEVELS.BOX_REWARDS[i];

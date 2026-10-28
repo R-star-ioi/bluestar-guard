@@ -294,9 +294,9 @@ var G = require('./boot.js');
       Game.setState('victory');
     },
 
-    // 主界面领取宝箱
-    claimChest: function (i) {
-      var amt = G.Meta.claimChest(i);
+    // 主界面领取宝箱（按关卡领取，每关独立）
+    claimChest: function (level, i) {
+      var amt = G.Meta.claimChest(level, i);
       if (!amt) { G.Audio.play('error'); return; }
       G.Audio.play('coin');
       Game.showMsg('+' + amt + ' 钻石', '#7ef9ff', 1.2);

@@ -533,12 +533,17 @@ var G = require('../boot.js');
       ctx.fillStyle = locked ? '#ff8b8b' : 'rgba(255,255,255,0.5)';
       ctx.fillText(locked ? ('🔒 未解锁 · 请先通关第 ' + G.Meta.maxLevel + ' 关') : ('已解锁 ' + G.Meta.maxLevel + '/' + D.LEVELS.TOTAL + ' 关'), W / 2, y0 + 70);
 
-      // 通关宝箱（主界面领取）
+      // 通关宝箱（主界面领取）：只显示【当前选中关卡】自己的那一份
       var bx0 = W / 2 - 110, by0 = y0 + 80;
       var boxCols = ['#cd9a3c', '#8fa8d9', '#b56ce0'];
       var boxReqs = ['任意通关', '≥70%血量', '满血通关'];
-      var ch = G.Meta.chests;
-      var hasChests = ch && ch.level > 0;
+      var ch = G.Meta.chestOf(lv);
+      var hasChests = !!ch;
+      // 其他关卡还有没领的，给个提示（宝箱是按关记的，换关才领得到）
+      var pendOther = 0;
+      for (var ck in G.Meta.chests) {
+        if (G.Meta.chests.hasOwnProperty(ck) && parseInt(ck, 10) !== lv) pendOther += G.Meta.pendingChests(parseInt(ck, 10));
+      }
       for (var bi = 0; bi < 3; bi++) {
         var bcx = bx0 + bi * 76 + 30;
         var got = hasChests && ch.boxes[bi];
@@ -564,17 +569,21 @@ var G = require('../boot.js');
         ctx.font = '9px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.fillText(!hasChests ? '' : (claimed ? '已开启' : (got ? '点击领取' : boxReqs[bi])), bcx, by0 + 52);
-        // 可领取的箱子可点击
+        // 可领取的箱子可点击（按关卡领取）
         if (got && !claimed) {
-          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx) {
-            return function () { game.claimChest(idx); };
-          })(bi));
+          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx, l) {
+            return function () { game.claimChest(l, idx); };
+          })(bi, lv));
         }
       }
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.textAlign = 'center';
       if (hasChests) {
-        ctx.font = '9px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.fillText('第 ' + ch.level + ' 关宝箱', W / 2, by0 + 66);
+        ctx.fillText('第 ' + lv + ' 关宝箱' + (pendOther ? '　·　其他关待领 ' + pendOther + ' 个' : ''), W / 2, by0 + 66);
+      } else if (pendOther) {
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText('本关暂无宝箱　·　其他关待领 ' + pendOther + ' 个', W / 2, by0 + 66);
       }
 
       // 开始挑战（未解锁前一关则不可点击）

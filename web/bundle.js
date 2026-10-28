@@ -608,6 +608,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.3', title: '宝箱按关卡独立', lines: ['每关的宝箱各自记录，通关别关不再串状态', '重打本关只增不减，已领取的不会复活', '切换关卡时显示该关自己的宝箱'] },
     { ver: 'v0.5.2', title: '主菜单排版修复', lines: ['标题区独立排版，水晶徽记不再被选关卡片遮挡', '徽记改为矢量绘制，不依赖 emoji', '矮屏下按钮与说明文字自动收紧，不再重叠'] },
     { ver: 'v0.5.1', title: '宝箱与资源展示优化', lines: ['通关宝箱改为回主界面领取 领取后显示已打开状态', '钻石与金币移至右上角资源栏', '1-50关均可预览 未通关前关则开始按钮锁定'] },
     { ver: 'v0.5.0', title: '关卡系统上线', lines: ['50个关卡，每关20波，通关开宝箱', '主界面左右箭头选关，逐关解锁', '新增钻石：满血通关300钻/≥70%150钻/保底50钻'] },
@@ -636,7 +637,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.2';
+  D.VERSION = 'v0.5.3';
   G.D = D;
 })();
 
@@ -646,6 +647,30 @@ __def("js/core/meta.js", function (module, exports, require) {
 var G = require('../boot.js');
 (function () {
   var U = G.U, D = G.D;
+  // 存档兼容：旧版只有一条 {level, boxes, claimed}，按它记录的关卡归档进新结构
+  function normalizeChests(raw) {
+    var out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    function put(lv, rec) {
+      lv = parseInt(lv, 10);
+      if (!lv || lv < 1) return;
+      var boxes = [false, false, false], claimed = [false, false, false];
+      for (var i = 0; i < 3; i++) {
+        boxes[i] = !!(rec && rec.boxes && rec.boxes[i]);
+        claimed[i] = boxes[i] && !!(rec && rec.claimed && rec.claimed[i]);
+      }
+      out[lv] = { boxes: boxes, claimed: claimed };
+    }
+    if (raw.level !== undefined) {
+      put(raw.level, raw);                       // 旧格式：单条记录
+    } else {
+      for (var k in raw) {
+        if (raw.hasOwnProperty(k) && isFinite(k)) put(k, raw[k]);
+      }
+    }
+    return out;
+  }
+
   var Meta = {
     gold: 0,                          // 升级金币（局外钱包）
     unlocked: { archer: true },
@@ -654,7 +679,9 @@ var G = require('../boot.js');
     diamonds: 0,                      // 钻石（通关宝箱奖励）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
-    chests: { level: 0, boxes: [false, false, false], claimed: [false, false, false] }, // 主界面领取的宝箱
+    // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
+    // boxes[i]=该档是否达成；claimed[i]=该档是否已领取。重打同一关只增不减，已领取不复活。
+    chests: {},
 
     load: function () {
       var m = G.P.storage.get('lx_meta', null);
@@ -666,7 +693,7 @@ var G = require('../boot.js');
         Meta.diamonds = m.diamonds || 0;
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
-        if (m.chests) Meta.chests = m.chests;
+        Meta.chests = normalizeChests(m.chests);
       }
     },
     save: function () {
@@ -683,14 +710,32 @@ var G = require('../boot.js');
       Meta.save();
     },
 
-    // 通关后把宝箱放回主界面待领
+    // 通关后把宝箱放回主界面待领（每关各一份，互不影响）
     setChests: function (level, boxes) {
-      Meta.chests = { level: level, boxes: boxes, claimed: [false, false, false] };
+      var rec = Meta.chests[level];
+      if (!rec) {
+        rec = { boxes: [false, false, false], claimed: [false, false, false] };
+        Meta.chests[level] = rec;
+      }
+      // 重打本关只增不减：这次打得差不会取消已达成档位，已领取的也不会复活
+      for (var i = 0; i < 3; i++) if (boxes[i]) rec.boxes[i] = true;
       Meta.save();
     },
-    // 在主界面领取宝箱，返回获得的钻石（0=不可领）
-    claimChest: function (i) {
-      var c = Meta.chests;
+    // 某关的宝箱记录（没通关过返回 null）
+    chestOf: function (level) {
+      return Meta.chests[level] || null;
+    },
+    // 某关还没领的宝箱数量
+    pendingChests: function (level) {
+      var c = Meta.chests[level];
+      if (!c) return 0;
+      var n = 0;
+      for (var i = 0; i < 3; i++) if (c.boxes[i] && !c.claimed[i]) n++;
+      return n;
+    },
+    // 领取某关的某个宝箱，返回钻石（0=不可领）
+    claimChest: function (level, i) {
+      var c = Meta.chests[level];
       if (!c || !c.boxes[i] || c.claimed[i]) return 0;
       c.claimed[i] = true;
       var amt = D.LEVELS.BOX_REWARDS[i];
@@ -3360,12 +3405,17 @@ var G = require('../boot.js');
       ctx.fillStyle = locked ? '#ff8b8b' : 'rgba(255,255,255,0.5)';
       ctx.fillText(locked ? ('🔒 未解锁 · 请先通关第 ' + G.Meta.maxLevel + ' 关') : ('已解锁 ' + G.Meta.maxLevel + '/' + D.LEVELS.TOTAL + ' 关'), W / 2, y0 + 70);
 
-      // 通关宝箱（主界面领取）
+      // 通关宝箱（主界面领取）：只显示【当前选中关卡】自己的那一份
       var bx0 = W / 2 - 110, by0 = y0 + 80;
       var boxCols = ['#cd9a3c', '#8fa8d9', '#b56ce0'];
       var boxReqs = ['任意通关', '≥70%血量', '满血通关'];
-      var ch = G.Meta.chests;
-      var hasChests = ch && ch.level > 0;
+      var ch = G.Meta.chestOf(lv);
+      var hasChests = !!ch;
+      // 其他关卡还有没领的，给个提示（宝箱是按关记的，换关才领得到）
+      var pendOther = 0;
+      for (var ck in G.Meta.chests) {
+        if (G.Meta.chests.hasOwnProperty(ck) && parseInt(ck, 10) !== lv) pendOther += G.Meta.pendingChests(parseInt(ck, 10));
+      }
       for (var bi = 0; bi < 3; bi++) {
         var bcx = bx0 + bi * 76 + 30;
         var got = hasChests && ch.boxes[bi];
@@ -3391,17 +3441,21 @@ var G = require('../boot.js');
         ctx.font = '9px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.fillText(!hasChests ? '' : (claimed ? '已开启' : (got ? '点击领取' : boxReqs[bi])), bcx, by0 + 52);
-        // 可领取的箱子可点击
+        // 可领取的箱子可点击（按关卡领取）
         if (got && !claimed) {
-          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx) {
-            return function () { game.claimChest(idx); };
-          })(bi));
+          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx, l) {
+            return function () { game.claimChest(l, idx); };
+          })(bi, lv));
         }
       }
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.textAlign = 'center';
       if (hasChests) {
-        ctx.font = '9px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.fillText('第 ' + ch.level + ' 关宝箱', W / 2, by0 + 66);
+        ctx.fillText('第 ' + lv + ' 关宝箱' + (pendOther ? '　·　其他关待领 ' + pendOther + ' 个' : ''), W / 2, by0 + 66);
+      } else if (pendOther) {
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText('本关暂无宝箱　·　其他关待领 ' + pendOther + ' 个', W / 2, by0 + 66);
       }
 
       // 开始挑战（未解锁前一关则不可点击）
@@ -4132,9 +4186,9 @@ var G = require('./boot.js');
       Game.setState('victory');
     },
 
-    // 主界面领取宝箱
-    claimChest: function (i) {
-      var amt = G.Meta.claimChest(i);
+    // 主界面领取宝箱（按关卡领取，每关独立）
+    claimChest: function (level, i) {
+      var amt = G.Meta.claimChest(level, i);
       if (!amt) { G.Audio.play('error'); return; }
       G.Audio.play('coin');
       Game.showMsg('+' + amt + ' 钻石', '#7ef9ff', 1.2);
