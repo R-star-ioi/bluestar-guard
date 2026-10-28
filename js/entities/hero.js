@@ -245,7 +245,6 @@ var G = require('../boot.js');
         ctx.ellipse(sx, sy + 13, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 已装备武器：握在右手边（画在身体前面，握把压住身体边缘）
         // 底座
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.strokeStyle = c.color;
@@ -255,13 +254,8 @@ var G = require('../boot.js');
         ctx.fill(); ctx.stroke();
 
         // 职业图标（矢量绘制，不依赖 emoji 字体）
+        // 招募来的英雄只显示职业图标：装备的武器是主角的，别让每个英雄都跟着拿
         Hero.drawIcon(ctx, h.cls, sx, sy + bob - 2);
-
-        // 已装备武器：挎在右手边，箭头朝外（镜像）
-        if (G.Weapon) {
-          var eqw = G.Weapon.equipped(h.cls);
-          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25, true);
-        }
 
         // 等级徽章
         ctx.fillStyle = c.color;

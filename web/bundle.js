@@ -701,6 +701,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.11', title: '英雄不再持械', lines: ['招募来的英雄只显示职业图标，不再跟着拿当前装备的武器', '装备的武器只显示在玩家操控的主角身上'] },
     { ver: 'v0.5.10', title: '抽卡与背包手感', lines: ['卡池概率改成两行显示，不再顶出卡片', '抽到紫/红品质时翻牌慢放 + 音效', '武器列表滚动后，顶栏区域不再误点到下面的武器'] },
     { ver: 'v0.5.9', title: '武器朝向修复', lines: ['主角朝右时武器没有镜像，弓箭方向是反的', '现在朝哪边就镜像到哪边；英雄的弓也统一朝外'] },
     { ver: 'v0.5.8', title: '武器外观', lines: ['装备的武器会显示在角色手上（按品质取图，紫/红带光晕）', '武器图新增透明底版本，游戏内用抠图、卡面用带背景版'] },
@@ -738,7 +739,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.10';
+  D.VERSION = 'v0.5.11';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -3013,7 +3014,6 @@ var G = require('../boot.js');
         ctx.ellipse(sx, sy + 13, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 已装备武器：握在右手边（画在身体前面，握把压住身体边缘）
         // 底座
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.strokeStyle = c.color;
@@ -3023,13 +3023,8 @@ var G = require('../boot.js');
         ctx.fill(); ctx.stroke();
 
         // 职业图标（矢量绘制，不依赖 emoji 字体）
+        // 招募来的英雄只显示职业图标：装备的武器是主角的，别让每个英雄都跟着拿
         Hero.drawIcon(ctx, h.cls, sx, sy + bob - 2);
-
-        // 已装备武器：挎在右手边，箭头朝外（镜像）
-        if (G.Weapon) {
-          var eqw = G.Weapon.equipped(h.cls);
-          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25, true);
-        }
 
         // 等级徽章
         ctx.fillStyle = c.color;
