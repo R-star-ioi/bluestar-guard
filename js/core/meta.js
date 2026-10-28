@@ -32,6 +32,7 @@ var G = require('../boot.js');
     levels: { archer: 1 },
     selected: 'archer',
     diamonds: 0,                      // 钻石（通关宝箱奖励）
+    fx: 1,                            // 特效强度 0~1（粒子/光圈/震屏，设置里可调）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
     // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
@@ -46,6 +47,7 @@ var G = require('../boot.js');
         Meta.levels = m.levels || { archer: 1 };
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
         Meta.diamonds = m.diamonds || 0;
+        Meta.fx = (typeof m.fx === 'number' && isFinite(m.fx)) ? Math.max(0, Math.min(1, m.fx)) : 1;
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
         Meta.chests = normalizeChests(m.chests);
@@ -56,6 +58,7 @@ var G = require('../boot.js');
         gold: Meta.gold, unlocked: Meta.unlocked,
         levels: Meta.levels, selected: Meta.selected,
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
+        fx: Meta.fx,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests
       });
     },

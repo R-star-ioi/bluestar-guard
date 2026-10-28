@@ -291,13 +291,18 @@ var G = require('../boot.js');
       Camera.shakePower = Math.max(Camera.shakePower * 0.5, power);
       Camera.shakeT = Math.max(Camera.shakeT, time);
     },
-    // 渲染偏移（含震屏）
+    // 渲染偏移（含震屏；震屏幅度跟随特效强度设置）
+    shakeK: function () {
+      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      if (v < 0) v = 0; if (v > 1) v = 1;
+      return 0.25 + 0.75 * v;
+    },
     ox: function () {
-      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) : 0;
+      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) * Camera.shakeK() : 0;
       return Camera.x + (Math.random() - 0.5) * s * 2;
     },
     oy: function () {
-      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) : 0;
+      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) * Camera.shakeK() : 0;
       return Camera.y + (Math.random() - 0.5) * s * 2;
     }
   };
@@ -608,6 +613,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.5', title: '战斗手感与设置', lines: ['暴击伤害数字更大更红', '17-20 波敌人更硬，关卡之间落差更明显', '清波提示分两行显示', '修复拖拽同名同级英雄无法合成', '新增设置：特效强度滑条（主界面右下角 ⚙️ / 暂停菜单）'] },
     { ver: 'v0.5.4', title: '界面排版整理', lines: ['英雄页：升级/选择改为右侧上下排列，不再压住 Lv 加成说明', '英雄页支持上下拖动滚动，矮屏也能看到全部主角', '局内顶栏去掉钻石（回主界面看），只留局内金币；左侧战绩与英雄数不再重叠', '附加技能栏改为居中显示'] },
     { ver: 'v0.5.3', title: '宝箱按关卡独立', lines: ['每关的宝箱各自记录，通关别关不再串状态', '重打本关只增不减，已领取的不会复活', '切换关卡时显示该关自己的宝箱'] },
     { ver: 'v0.5.2', title: '主菜单排版修复', lines: ['标题区独立排版，水晶徽记不再被选关卡片遮挡', '徽记改为矢量绘制，不依赖 emoji', '矮屏下按钮与说明文字自动收紧，不再重叠'] },
@@ -627,10 +633,12 @@ var G = require('../boot.js');
   D.LEVELS = {
     TOTAL: 50,
     WAVES: 20,             // 每关波次
-    HP_WAVE: 1.12,         // 波内血量：每波×1.12（第20波≈开局8.6倍）
+    HP_WAVE: 1.125,        // 波内血量：每波×1.125（第20波≈开局9.4倍）
     BUDGET_WAVE: 1.13,     // 波内数量预算：每波×1.13
-    DIFF: 1.15,            // 关间难度基数（血量）：每关×1.15，50关≈1074倍
-    DIFF_BUDGET_POW: 0.6,  // 数量预算随关间难度的缩放指数（防爆屏）
+    LATE_FROM: 15,         // 尾段陡增起始波：15~20 波额外加速（体感"最后一波很硬"）
+    LATE_RATE: 1.05,       // 尾段每波额外 ×1.05（15→20 共 ×1.34）
+    DIFF: 1.16,            // 关间难度基数（血量）：每关×1.16，50关≈1518倍
+    DIFF_BUDGET_POW: 0.62, // 数量预算随关间难度的缩放指数（防爆屏）
     BOSS_WAVES: [10, 20],  // 关内Boss波（20=关底Boss）
     BOX_REWARDS: [50, 100, 150], // 三档宝箱钻石：30%档/70%档/满血档
     NAMES: ['静谧草原', '荆棘丛林', '沉默森林', '风语荒漠', '霜冻苔原',
@@ -638,7 +646,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.4';
+  D.VERSION = 'v0.5.5';
   G.D = D;
 })();
 
@@ -678,6 +686,7 @@ var G = require('../boot.js');
     levels: { archer: 1 },
     selected: 'archer',
     diamonds: 0,                      // 钻石（通关宝箱奖励）
+    fx: 1,                            // 特效强度 0~1（粒子/光圈/震屏，设置里可调）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
     // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
@@ -692,6 +701,7 @@ var G = require('../boot.js');
         Meta.levels = m.levels || { archer: 1 };
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
         Meta.diamonds = m.diamonds || 0;
+        Meta.fx = (typeof m.fx === 'number' && isFinite(m.fx)) ? Math.max(0, Math.min(1, m.fx)) : 1;
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
         Meta.chests = normalizeChests(m.chests);
@@ -702,6 +712,7 @@ var G = require('../boot.js');
         gold: Meta.gold, unlocked: Meta.unlocked,
         levels: Meta.levels, selected: Meta.selected,
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
+        fx: Meta.fx,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests
       });
     },
@@ -983,8 +994,8 @@ var G = require('../boot.js');
       if (FX.texts.length > 40) FX.texts.shift();
       FX.texts.push({
         x: x + U.rand(-8, 8), y: y, str: str, t: 0,
-        life: crit ? 0.85 : 0.6, color: color || '#fff',
-        size: (size || 13) * (crit ? 1.45 : 1), crit: !!crit
+        life: crit ? 0.9 : 0.6, color: color || '#fff',
+        size: size || 13, crit: !!crit
       });
     },
     ring: function (x, y, color, maxR, life, width) {
@@ -1012,12 +1023,20 @@ var G = require('../boot.js');
       }
     },
 
+    // 特效强度（设置里可调 0~1），只影响粒子/光圈/震屏，不影响伤害飘字
+    alpha: function () {
+      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      return v < 0 ? 0 : (v > 1 ? 1 : v);
+    },
+
     draw: function (ctx, ox, oy) {
+      var fa = FX.alpha();
+      if (fa <= 0.02) return;
       var i, a;
       for (i = 0; i < FX.parts.length; i++) {
         var p = FX.parts[i];
         a = 1 - p.t / p.life;
-        ctx.globalAlpha = a;
+        ctx.globalAlpha = a * fa;
         ctx.fillStyle = p.color;
         var s = p.size * (0.4 + 0.6 * a);
         ctx.fillRect(p.x - ox - s / 2, p.y - oy - s / 2, s, s);
@@ -1027,7 +1046,7 @@ var G = require('../boot.js');
       for (i = 0; i < FX.rings.length; i++) {
         var r = FX.rings[i];
         var k = r.t / r.life;
-        ctx.globalAlpha = 1 - k;
+        ctx.globalAlpha = (1 - k) * fa;
         ctx.strokeStyle = r.color;
         ctx.lineWidth = r.width * (1 - k) + 1;
         ctx.beginPath();
@@ -1042,14 +1061,13 @@ var G = require('../boot.js');
         var t = FX.texts[i];
         var k = t.t / t.life;
         ctx.globalAlpha = k < 0.15 ? k / 0.15 : (1 - (k - 0.15) / 0.85);
-        ctx.font = 'bold ' + t.size + 'px sans-serif';
+        // 暴击：冒出来时先放大再回落
+        var pop = (t.crit && t.t < 0.12) ? 1.28 - (t.t / 0.12) * 0.28 : 1;
+        ctx.font = 'bold ' + Math.round(t.size * pop) + 'px sans-serif';
         ctx.textAlign = 'center';
-        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = t.crit ? 'rgba(60,0,0,0.85)' : 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = t.crit ? 4.5 : 3;
         var sx = t.x - ox, sy = t.y - oy;
-        if (t.crit) {
-          ctx.strokeText(t.str, sx, sy);
-        }
         ctx.strokeText(t.str, sx, sy);
         ctx.fillStyle = t.color;
         ctx.fillText(t.str, sx, sy);
@@ -2292,12 +2310,16 @@ var G = require('../boot.js');
       }
     },
 
-    damage: function (game, e, dmg, hx, hy, big) {
+    damage: function (game, e, dmg, hx, hy, big, crit) {
       if (e.dead) return;
       // 暴击判定在调用方处理，这里直接扣血
       e.hp -= dmg;
       e.hitT = 0.12;
-      G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), '#fff', big ? 14 : 12);
+      // 伤害飘字：暴击更大更红，重击（炮/爆）稍大
+      var txtSize = big ? 15 : 12;
+      var txtColor = '#fff';
+      if (crit) { txtSize = big ? 21 : 19; txtColor = '#ff4d4d'; }
+      G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), txtColor, txtSize, !!crit);
       G.FX.spray(e.x, e.y, Math.atan2(e.y - (hy || e.y), e.x - (hx || e.x)) + Math.PI, big ? 6 : 3, e.color, 130, 0.35, 3);
       if (e.hp <= 0) {
         e.dead = true;
@@ -2618,10 +2640,12 @@ var G = require('../boot.js');
       }
     },
 
-    hitTest: function (x, y) {
+    // exclude：拖拽合成时要把被拖的那个排除掉，否则它正好停在指针下，永远命中自己
+    hitTest: function (x, y, exclude) {
       var best = null, bestD = 1e9;
       for (var i = 0; i < Hero.list.length; i++) {
         var h = Hero.list[i];
+        if (h === exclude) continue;
         var d = U.dist2(x, y, h.x, h.y);
         if (d < D.HERO.DRAG_R * D.HERO.DRAG_R && d < bestD) {
           best = h; bestD = d;
@@ -2772,9 +2796,11 @@ var G = require('../boot.js');
     // 关间难度基数：1.15^(level-1)
     diffBase: function (level) { return Math.pow(D.LEVELS.DIFF, level - 1); },
 
-    // 怪物血量总倍率 = 关间难度 × 波内陡坡
+    // 怪物血量总倍率 = 关间难度 × 波内陡坡 × 尾段冲刺（15~20 波）
     hpMult: function (level, wave) {
-      return Waves.diffBase(level) * Math.pow(D.LEVELS.HP_WAVE, wave - 1);
+      var late = 1;
+      if (wave >= D.LEVELS.LATE_FROM) late = Math.pow(D.LEVELS.LATE_RATE, wave - D.LEVELS.LATE_FROM + 1);
+      return Waves.diffBase(level) * Math.pow(D.LEVELS.HP_WAVE, wave - 1) * late;
     },
 
     // 数量预算 = 基础(随关卡) × 关间^0.6 × 波内陡坡
@@ -2960,19 +2986,25 @@ var G = require('../boot.js');
       ctx.textAlign = 'center';
       ctx.fillText(Math.ceil(pl.hp) + '/' + Math.round(pl.maxHp), 20 + hpw / 2, 28.5);
 
-      // 击杀 / 时间 / 加成 + 场上英雄（按实测宽度顺排，不再写死坐标撞在一起）
+      // 击杀 / 时间 / 加成 / 英雄（图标各占固定槽位，数字左缘对齐，不再忽宽忽窄挤在一起）
       ctx.font = '10px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.textAlign = 'left';
       var wAtk = G.Player.stats && G.Player.stats.waveAtk ? Math.round(G.Player.stats.waveAtk * 100) : 0;
-      var hS1 = '☠' + game.kills + '  ⏱' + U.fmtTime(game.playTime) + '  ⚔+' + wAtk + '%';
-      var hS2 = '👥' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT;
-      var hW1 = ctx.measureText(hS1).width + ctx.measureText(hS2).width + 14;
-      if (22 + hW1 > W * 0.47) ctx.font = '9px sans-serif';   // 窄屏降一号，保证不压到中间波次文字
-      hW1 = ctx.measureText(hS1).width;
-      ctx.fillText(hS1, 22, 48);
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(hS2, 22 + hW1 + 14, 48);
+      var segs = [
+        { icon: '☠', val: String(game.kills), color: 'rgba(255,255,255,0.78)' },
+        { icon: '⏱', val: U.fmtTime(game.playTime), color: 'rgba(255,255,255,0.78)' },
+        { icon: '⚔', val: '+' + wAtk + '%', color: 'rgba(255,255,255,0.78)' },
+        { icon: '👥', val: G.Hero.list.length + '/' + D.HERO.MAX_COUNT, color: 'rgba(180,190,230,0.85)' }
+      ];
+      var segGap = 12, segX = 22;
+      for (var sg = 0; sg < segs.length; sg++) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = segs[sg].color;
+        ctx.fillText(segs[sg].icon, segX + 7, 48);       // 图标居中在 14px 槽里
+        ctx.textAlign = 'left';
+        ctx.fillText(segs[sg].val, segX + 17, 48);       // 数字固定从槽后开始
+        segX += 17 + ctx.measureText(segs[sg].val).width + segGap;
+      }
 
       // 关卡与波次（中）
       ctx.textAlign = 'center';
@@ -3080,20 +3112,26 @@ var G = require('../boot.js');
       }
     },
 
-    // 波次开场横幅 / 消息
+    // 波次开场横幅 / 消息（支持 '\n' 换行，多行时整体居中）
     drawAnnounce: function (ctx, game) {
       if (!game.msg || game.msg.t <= 0) return;
-      var W = G.P.screenW;
+      var W = G.P.screenW, H = G.P.screenH;
       var k = game.msg.t / game.msg.life;
       var a = k > 0.8 ? (1 - k) / 0.2 : Math.min(1, k / 0.15 + 0.2);
       ctx.globalAlpha = Math.min(1, a);
-      ctx.font = 'bold 26px sans-serif';
       ctx.textAlign = 'center';
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth = 5;
-      ctx.strokeText(game.msg.text, W / 2, G.P.screenH * 0.32);
-      ctx.fillStyle = game.msg.color || '#ffd166';
-      ctx.fillText(game.msg.text, W / 2, G.P.screenH * 0.32);
+      var lines = String(game.msg.text).split('\n');
+      var lh = lines.length > 1 ? 32 : 0;
+      var startY = H * 0.32 - (lines.length - 1) * lh / 2;
+      for (var i = 0; i < lines.length; i++) {
+        var isTitle = i === 0;
+        ctx.font = isTitle ? 'bold 26px sans-serif' : 'bold 19px sans-serif';
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = isTitle ? 5 : 4;
+        ctx.strokeText(lines[i], W / 2, startY + i * lh);
+        ctx.fillStyle = game.msg.color || '#ffd166';
+        ctx.fillText(lines[i], W / 2, startY + i * lh);
+      }
       ctx.globalAlpha = 1;
     },
 
@@ -3503,6 +3541,22 @@ var G = require('../boot.js');
       for (var li = 0; li < lines.length; li++) {
         ctx.fillText(lines[li], W / 2, startY + (220 + li * 17) * gs);
       }
+      // 右下角设置入口
+      var gR = 21, gcx = W - 30 - gR, gcy = H - 62;
+      UI.pill(ctx, gcx - gR, gcy - gR, gR * 2, gR * 2, 'rgba(20,32,72,0.95)', gR);
+      ctx.strokeStyle = 'rgba(150,190,255,0.65)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gcx - gR + 1, gcy - gR + 1, gR * 2 - 2, gR * 2 - 2, gR); ctx.stroke(); }
+      ctx.textAlign = 'center';
+      ctx.font = '22px sans-serif';
+      ctx.fillStyle = '#eaf2ff';
+      ctx.fillText('⚙️', gcx, gcy + 8);
+      UI.reg('settings', gcx - gR, gcy - gR, gR * 2, gR * 2, function () {
+        G.Audio.play('button');
+        game.settingsBack = 'menu';
+        game.setState('settings');
+      });
+
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
       ctx.fillText(D.VERSION + ' · 浏览器预览版（微信小游戏同源代码）', W / 2, H - 18);
@@ -3895,17 +3949,114 @@ var G = require('../boot.js');
         if (G.Audio.enabled) G.Audio.resume();
         G.P.storage.set('lx_sound', G.Audio.enabled ? 1 : 0);
       });
-      UI.button(ctx, 'restart', W / 2 - 100, H * 0.34 + 122, 200, 46, '↻ 重新开始', null, '#8e44ad', function () {
+      UI.button(ctx, 'settings', W / 2 - 100, H * 0.34 + 122, 200, 46, '⚙️ 设置', '特效强度', 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.settingsBack = 'paused';
+        game.setState('settings');
+      });
+      UI.button(ctx, 'restart', W / 2 - 100, H * 0.34 + 180, 200, 46, '↻ 重新开始', null, '#8e44ad', function () {
         game.startRun();
       });
-      UI.button(ctx, 'quit', W / 2 - 100, H * 0.34 + 180, 200, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
+      UI.button(ctx, 'quit', W / 2 - 100, H * 0.34 + 238, 200, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
         game.setState('menu');
+      });
+    },
+
+    // ================= 设置 =================
+    sliderRect: function () { return UI._slider || null; },
+    setFx: function (v) {
+      v = Math.max(0, Math.min(1, v));
+      G.Meta.fx = v;
+    },
+    setFxFromX: function (x) {
+      var s = UI._slider;
+      if (!s) return;
+      UI.setFx((x - s.x) / s.w);
+    },
+
+    drawSettings: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      ctx.fillStyle = 'rgba(5,8,22,0.94)';
+      ctx.fillRect(0, 0, W, H);
+      UI.reg('set_block', 0, 0, W, H, function () { });   // 吞掉点到面板外的点击
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('⚙️ 设置', W / 2, H * 0.16);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText('拖动滑块调整；越低越安静，越高越炸裂', W / 2, H * 0.16 + 24);
+
+      var pw = Math.min(330, W - 40), px = (W - pw) / 2;
+      var py = H * 0.26, ph = 182;
+      ctx.fillStyle = 'rgba(20,28,60,0.92)';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
+      else ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = 'rgba(130,170,255,0.35)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.stroke(); }
+
+      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#cfe3ff';
+      ctx.fillText('特效强度', px + 24, py + 34);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText(Math.round(v * 100) + '%', px + pw - 24, py + 34);
+
+      // 滑轨 + 旋钮
+      var tx = px + 24, tw = pw - 48, ty = py + 68, th = 10;
+      UI.pill(ctx, tx, ty, tw, th, 'rgba(0,0,0,0.5)', 5);
+      var fw = Math.max(3, tw * v);
+      var grad2 = ctx.createLinearGradient(tx, 0, tx + tw, 0);
+      grad2.addColorStop(0, '#3b6ea5');
+      grad2.addColorStop(1, '#7ef9ff');
+      ctx.fillStyle = grad2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(tx, ty, fw, th, 5); ctx.fill(); }
+      else ctx.fillRect(tx, ty, fw, th);
+      var kx = tx + tw * v;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7ef9ff';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.stroke();
+      UI._slider = { x: tx, y: ty, w: tw, h: th };
+
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.textAlign = 'left';
+      ctx.fillText('0% 关', tx, ty + 32);
+      ctx.textAlign = 'right';
+      ctx.fillText('100% 满', tx + tw, ty + 32);
+
+      // 快捷档位
+      var presets = [['关', 0], ['弱', 0.35], ['中', 0.65], ['满', 1]];
+      var bw = (pw - 48 - 24) / 4;
+      for (var i = 0; i < presets.length; i++) {
+        (function (val, label, idx) {
+          var on = Math.abs(v - val) < 0.03;
+          UI.button(ctx, 'fxp_' + idx, px + 24 + idx * (bw + 8), py + 116, bw, 34, label, null,
+            on ? '#2d6cdf' : 'rgba(90,100,140,1)', function () {
+              UI.setFx(val);
+              G.Meta.save();
+              G.Audio.play('button');
+            });
+        })(presets[i][1], presets[i][0], i);
+      }
+
+      UI.button(ctx, 'set_back', W / 2 - 90, py + ph + 26, 180, 48, '‹ 返回', null, '#2d6cdf', function () {
+        G.Meta.save();
+        G.Audio.play('button');
+        game.setState(game.settingsBack || 'menu');
       });
     },
 
     // ================= 总绘制入口 =================
     draw: function (ctx, game) {
       UI.begin();
+      UI._slider = null;
       switch (game.state) {
         case 'menu': UI.drawMenu(ctx, game); break;
         case 'heroes': UI.drawHeroes(ctx, game); break;
@@ -3920,6 +4071,7 @@ var G = require('../boot.js');
           UI.drawLevelUp(ctx, game);
           break;
         case 'paused': UI.drawHud(ctx, game); UI.drawPaused(ctx, game); break;
+        case 'settings': UI.drawSettings(ctx, game); break;
         case 'gameover': UI.drawGameOver(ctx, game); break;
         case 'victory': UI.drawVictory(ctx, game); break;
       }
@@ -4179,7 +4331,7 @@ var G = require('./boot.js');
       // 暴击
       var crit = Math.random() < (G.Player.stats.crit * 0.08);
       if (crit) dmg *= 2;
-      G.Enemy.damage(Game, e, dmg, hx, hy, big || crit);
+      G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
       var leech = G.Player.stats.leech * 0.02;
       if (leech > 0) G.Player.heal(dmg * leech * 0.5);
@@ -4205,7 +4357,7 @@ var G = require('./boot.js');
       var gain = D.WAVE.ATK_PER_WAVE + (w % D.WAVE.BOSS_EVERY === 0 ? D.WAVE.ATK_BOSS_BONUS : 0);
       G.Player.stats.waveAtk += gain;
       var pct = Math.round(G.Player.stats.waveAtk * 100);
-      Game.showMsg('第 ' + w + ' 波 已肃清 ✓  主角攻击 +' + Math.round(gain * 100) + '%', '#7bed9f', 1.6);
+      Game.showMsg('第 ' + w + ' 波 已肃清 ✓\n主角攻击 +' + Math.round(gain * 100) + '%', '#7bed9f', 1.7);
       G.FX.text(G.Player.x, G.Player.y - 30, '攻击 +' + Math.round(gain * 100) + '%', '#ff9f43', 15);
       G.FX.ring(G.Player.x, G.Player.y, '#ff9f43', 40, 0.4, 3);
       // 波奖励
@@ -4254,6 +4406,15 @@ var G = require('./boot.js');
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
+      // 设置页：只有滑块区域由这里接管（按钮在 Input 层已被拦截）
+      if (Game.state === 'settings') {
+        var sr = G.UI && G.UI.sliderRect ? G.UI.sliderRect() : null;
+        if (sr && x >= sr.x - 16 && x <= sr.x + sr.w + 16 && y >= sr.y - 26 && y <= sr.y + sr.h + 26) {
+          Game.sliderDrag = { id: id };
+          G.UI.setFxFromX(x);
+        }
+        return;
+      }
       // 英雄页：空白处按下 = 开始拖动滚动（按钮在 Input 层已被拦截，不会走到这里）
       if (Game.state === 'heroes') {
         Game.heroDrag = { id: id, y0: y, base: Game.heroScroll || 0 };
@@ -4288,6 +4449,11 @@ var G = require('./boot.js');
     },
 
     onWorldMove: function (id, x, y) {
+      // 设置页：拖动滑块
+      if (Game.state === 'settings') {
+        if (Game.sliderDrag && Game.sliderDrag.id === id) G.UI.setFxFromX(x);
+        return;
+      }
       // 英雄页：上下拖动滚动列表（上限在绘制时按内容高度夹紧）
       if (Game.state === 'heroes') {
         var hd = Game.heroDrag;
@@ -4318,6 +4484,10 @@ var G = require('./boot.js');
     },
 
     onWorldEnd: function (id, x, y) {
+      if (Game.state === 'settings') {
+        if (Game.sliderDrag) { Game.sliderDrag = null; G.Meta.save(); }   // 松手才落盘
+        return;
+      }
       if (Game.state === 'heroes') {
         if (Game.heroDrag && Game.heroDrag.id === id) Game.heroDrag = null;
         return;
@@ -4335,9 +4505,9 @@ var G = require('./boot.js');
           Game.panelHero = drag.hero;
           G.Audio.play('button');
         } else {
-          // 尝试合成
+          // 尝试合成（排除被拖拽者本身，否则永远命中自己）
           var wx = x + Game.viewOx, wy = y + Game.viewOy;
-          var other = G.Hero.hitTest(wx, wy);
+          var other = G.Hero.hitTest(wx, wy, drag.hero);
           if (other && other !== drag.hero && G.Hero.canMerge(drag.hero, other)) {
             G.Hero.merge(drag.hero, other, Game);
           } else {
@@ -4402,7 +4572,10 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'victory') {
+      var uiOnly = (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' ||
+        Game.state === 'changelog' || Game.state === 'victory' ||
+        (Game.state === 'settings' && Game.settingsBack !== 'paused'));
+      if (uiOnly) {
         // 菜单/英雄/结算只画背景层
         if (Game.state === 'gameover' || Game.state === 'victory') {
           G.Bg.draw(ctx, ox, oy);
@@ -4427,7 +4600,7 @@ var G = require('./boot.js');
       if (Game.drag && Game.drag.moved && Game.state === 'playing') {
         var dh = Game.drag.hero;
         G.Hero.drawRange(ctx, ox, oy, dh, D.HEROES[dh.cls].color);
-        var other = G.Hero.hitTest(dh.x, dh.y);
+        var other = G.Hero.hitTest(dh.x, dh.y, dh);
         if (other && other !== dh && G.Hero.canMerge(dh, other)) {
           ctx.strokeStyle = '#ffd700';
           ctx.lineWidth = 3;

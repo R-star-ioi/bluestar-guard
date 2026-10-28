@@ -216,10 +216,12 @@ var G = require('../boot.js');
       }
     },
 
-    hitTest: function (x, y) {
+    // exclude：拖拽合成时要把被拖的那个排除掉，否则它正好停在指针下，永远命中自己
+    hitTest: function (x, y, exclude) {
       var best = null, bestD = 1e9;
       for (var i = 0; i < Hero.list.length; i++) {
         var h = Hero.list[i];
+        if (h === exclude) continue;
         var d = U.dist2(x, y, h.x, h.y);
         if (d < D.HERO.DRAG_R * D.HERO.DRAG_R && d < bestD) {
           best = h; bestD = d;

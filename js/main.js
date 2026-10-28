@@ -247,7 +247,7 @@ var G = require('./boot.js');
       // 暴击
       var crit = Math.random() < (G.Player.stats.crit * 0.08);
       if (crit) dmg *= 2;
-      G.Enemy.damage(Game, e, dmg, hx, hy, big || crit);
+      G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
       var leech = G.Player.stats.leech * 0.02;
       if (leech > 0) G.Player.heal(dmg * leech * 0.5);
@@ -273,7 +273,7 @@ var G = require('./boot.js');
       var gain = D.WAVE.ATK_PER_WAVE + (w % D.WAVE.BOSS_EVERY === 0 ? D.WAVE.ATK_BOSS_BONUS : 0);
       G.Player.stats.waveAtk += gain;
       var pct = Math.round(G.Player.stats.waveAtk * 100);
-      Game.showMsg('第 ' + w + ' 波 已肃清 ✓  主角攻击 +' + Math.round(gain * 100) + '%', '#7bed9f', 1.6);
+      Game.showMsg('第 ' + w + ' 波 已肃清 ✓\n主角攻击 +' + Math.round(gain * 100) + '%', '#7bed9f', 1.7);
       G.FX.text(G.Player.x, G.Player.y - 30, '攻击 +' + Math.round(gain * 100) + '%', '#ff9f43', 15);
       G.FX.ring(G.Player.x, G.Player.y, '#ff9f43', 40, 0.4, 3);
       // 波奖励
@@ -322,6 +322,15 @@ var G = require('./boot.js');
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
+      // 设置页：只有滑块区域由这里接管（按钮在 Input 层已被拦截）
+      if (Game.state === 'settings') {
+        var sr = G.UI && G.UI.sliderRect ? G.UI.sliderRect() : null;
+        if (sr && x >= sr.x - 16 && x <= sr.x + sr.w + 16 && y >= sr.y - 26 && y <= sr.y + sr.h + 26) {
+          Game.sliderDrag = { id: id };
+          G.UI.setFxFromX(x);
+        }
+        return;
+      }
       // 英雄页：空白处按下 = 开始拖动滚动（按钮在 Input 层已被拦截，不会走到这里）
       if (Game.state === 'heroes') {
         Game.heroDrag = { id: id, y0: y, base: Game.heroScroll || 0 };
@@ -356,6 +365,11 @@ var G = require('./boot.js');
     },
 
     onWorldMove: function (id, x, y) {
+      // 设置页：拖动滑块
+      if (Game.state === 'settings') {
+        if (Game.sliderDrag && Game.sliderDrag.id === id) G.UI.setFxFromX(x);
+        return;
+      }
       // 英雄页：上下拖动滚动列表（上限在绘制时按内容高度夹紧）
       if (Game.state === 'heroes') {
         var hd = Game.heroDrag;
@@ -386,6 +400,10 @@ var G = require('./boot.js');
     },
 
     onWorldEnd: function (id, x, y) {
+      if (Game.state === 'settings') {
+        if (Game.sliderDrag) { Game.sliderDrag = null; G.Meta.save(); }   // 松手才落盘
+        return;
+      }
       if (Game.state === 'heroes') {
         if (Game.heroDrag && Game.heroDrag.id === id) Game.heroDrag = null;
         return;
@@ -403,9 +421,9 @@ var G = require('./boot.js');
           Game.panelHero = drag.hero;
           G.Audio.play('button');
         } else {
-          // 尝试合成
+          // 尝试合成（排除被拖拽者本身，否则永远命中自己）
           var wx = x + Game.viewOx, wy = y + Game.viewOy;
-          var other = G.Hero.hitTest(wx, wy);
+          var other = G.Hero.hitTest(wx, wy, drag.hero);
           if (other && other !== drag.hero && G.Hero.canMerge(drag.hero, other)) {
             G.Hero.merge(drag.hero, other, Game);
           } else {
@@ -470,7 +488,10 @@ var G = require('./boot.js');
       Game.viewOx = ox; Game.viewOy = oy;
 
       ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
-      if (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'victory') {
+      var uiOnly = (Game.state === 'menu' || Game.state === 'gameover' || Game.state === 'heroes' ||
+        Game.state === 'changelog' || Game.state === 'victory' ||
+        (Game.state === 'settings' && Game.settingsBack !== 'paused'));
+      if (uiOnly) {
         // 菜单/英雄/结算只画背景层
         if (Game.state === 'gameover' || Game.state === 'victory') {
           G.Bg.draw(ctx, ox, oy);
@@ -495,7 +516,7 @@ var G = require('./boot.js');
       if (Game.drag && Game.drag.moved && Game.state === 'playing') {
         var dh = Game.drag.hero;
         G.Hero.drawRange(ctx, ox, oy, dh, D.HEROES[dh.cls].color);
-        var other = G.Hero.hitTest(dh.x, dh.y);
+        var other = G.Hero.hitTest(dh.x, dh.y, dh);
         if (other && other !== dh && G.Hero.canMerge(dh, other)) {
           ctx.strokeStyle = '#ffd700';
           ctx.lineWidth = 3;

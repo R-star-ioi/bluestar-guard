@@ -206,12 +206,16 @@ var G = require('../boot.js');
       }
     },
 
-    damage: function (game, e, dmg, hx, hy, big) {
+    damage: function (game, e, dmg, hx, hy, big, crit) {
       if (e.dead) return;
       // 暴击判定在调用方处理，这里直接扣血
       e.hp -= dmg;
       e.hitT = 0.12;
-      G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), '#fff', big ? 14 : 12);
+      // 伤害飘字：暴击更大更红，重击（炮/爆）稍大
+      var txtSize = big ? 15 : 12;
+      var txtColor = '#fff';
+      if (crit) { txtSize = big ? 21 : 19; txtColor = '#ff4d4d'; }
+      G.FX.text(e.x, e.y - e.r - 6, String(Math.round(dmg)), txtColor, txtSize, !!crit);
       G.FX.spray(e.x, e.y, Math.atan2(e.y - (hy || e.y), e.x - (hx || e.x)) + Math.PI, big ? 6 : 3, e.color, 130, 0.35, 3);
       if (e.hp <= 0) {
         e.dead = true;

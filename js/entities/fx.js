@@ -36,8 +36,8 @@ var G = require('../boot.js');
       if (FX.texts.length > 40) FX.texts.shift();
       FX.texts.push({
         x: x + U.rand(-8, 8), y: y, str: str, t: 0,
-        life: crit ? 0.85 : 0.6, color: color || '#fff',
-        size: (size || 13) * (crit ? 1.45 : 1), crit: !!crit
+        life: crit ? 0.9 : 0.6, color: color || '#fff',
+        size: size || 13, crit: !!crit
       });
     },
     ring: function (x, y, color, maxR, life, width) {
@@ -65,12 +65,20 @@ var G = require('../boot.js');
       }
     },
 
+    // 特效强度（设置里可调 0~1），只影响粒子/光圈/震屏，不影响伤害飘字
+    alpha: function () {
+      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      return v < 0 ? 0 : (v > 1 ? 1 : v);
+    },
+
     draw: function (ctx, ox, oy) {
+      var fa = FX.alpha();
+      if (fa <= 0.02) return;
       var i, a;
       for (i = 0; i < FX.parts.length; i++) {
         var p = FX.parts[i];
         a = 1 - p.t / p.life;
-        ctx.globalAlpha = a;
+        ctx.globalAlpha = a * fa;
         ctx.fillStyle = p.color;
         var s = p.size * (0.4 + 0.6 * a);
         ctx.fillRect(p.x - ox - s / 2, p.y - oy - s / 2, s, s);
@@ -80,7 +88,7 @@ var G = require('../boot.js');
       for (i = 0; i < FX.rings.length; i++) {
         var r = FX.rings[i];
         var k = r.t / r.life;
-        ctx.globalAlpha = 1 - k;
+        ctx.globalAlpha = (1 - k) * fa;
         ctx.strokeStyle = r.color;
         ctx.lineWidth = r.width * (1 - k) + 1;
         ctx.beginPath();
@@ -95,14 +103,13 @@ var G = require('../boot.js');
         var t = FX.texts[i];
         var k = t.t / t.life;
         ctx.globalAlpha = k < 0.15 ? k / 0.15 : (1 - (k - 0.15) / 0.85);
-        ctx.font = 'bold ' + t.size + 'px sans-serif';
+        // 暴击：冒出来时先放大再回落
+        var pop = (t.crit && t.t < 0.12) ? 1.28 - (t.t / 0.12) * 0.28 : 1;
+        ctx.font = 'bold ' + Math.round(t.size * pop) + 'px sans-serif';
         ctx.textAlign = 'center';
-        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = t.crit ? 'rgba(60,0,0,0.85)' : 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = t.crit ? 4.5 : 3;
         var sx = t.x - ox, sy = t.y - oy;
-        if (t.crit) {
-          ctx.strokeText(t.str, sx, sy);
-        }
         ctx.strokeText(t.str, sx, sy);
         ctx.fillStyle = t.color;
         ctx.fillText(t.str, sx, sy);

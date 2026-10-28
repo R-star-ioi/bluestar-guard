@@ -24,9 +24,11 @@ var G = require('../boot.js');
     // 关间难度基数：1.15^(level-1)
     diffBase: function (level) { return Math.pow(D.LEVELS.DIFF, level - 1); },
 
-    // 怪物血量总倍率 = 关间难度 × 波内陡坡
+    // 怪物血量总倍率 = 关间难度 × 波内陡坡 × 尾段冲刺（15~20 波）
     hpMult: function (level, wave) {
-      return Waves.diffBase(level) * Math.pow(D.LEVELS.HP_WAVE, wave - 1);
+      var late = 1;
+      if (wave >= D.LEVELS.LATE_FROM) late = Math.pow(D.LEVELS.LATE_RATE, wave - D.LEVELS.LATE_FROM + 1);
+      return Waves.diffBase(level) * Math.pow(D.LEVELS.HP_WAVE, wave - 1) * late;
     },
 
     // 数量预算 = 基础(随关卡) × 关间^0.6 × 波内陡坡

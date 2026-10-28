@@ -87,19 +87,25 @@ var G = require('../boot.js');
       ctx.textAlign = 'center';
       ctx.fillText(Math.ceil(pl.hp) + '/' + Math.round(pl.maxHp), 20 + hpw / 2, 28.5);
 
-      // 击杀 / 时间 / 加成 + 场上英雄（按实测宽度顺排，不再写死坐标撞在一起）
+      // 击杀 / 时间 / 加成 / 英雄（图标各占固定槽位，数字左缘对齐，不再忽宽忽窄挤在一起）
       ctx.font = '10px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.textAlign = 'left';
       var wAtk = G.Player.stats && G.Player.stats.waveAtk ? Math.round(G.Player.stats.waveAtk * 100) : 0;
-      var hS1 = '☠' + game.kills + '  ⏱' + U.fmtTime(game.playTime) + '  ⚔+' + wAtk + '%';
-      var hS2 = '👥' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT;
-      var hW1 = ctx.measureText(hS1).width + ctx.measureText(hS2).width + 14;
-      if (22 + hW1 > W * 0.47) ctx.font = '9px sans-serif';   // 窄屏降一号，保证不压到中间波次文字
-      hW1 = ctx.measureText(hS1).width;
-      ctx.fillText(hS1, 22, 48);
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(hS2, 22 + hW1 + 14, 48);
+      var segs = [
+        { icon: '☠', val: String(game.kills), color: 'rgba(255,255,255,0.78)' },
+        { icon: '⏱', val: U.fmtTime(game.playTime), color: 'rgba(255,255,255,0.78)' },
+        { icon: '⚔', val: '+' + wAtk + '%', color: 'rgba(255,255,255,0.78)' },
+        { icon: '👥', val: G.Hero.list.length + '/' + D.HERO.MAX_COUNT, color: 'rgba(180,190,230,0.85)' }
+      ];
+      var segGap = 12, segX = 22;
+      for (var sg = 0; sg < segs.length; sg++) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = segs[sg].color;
+        ctx.fillText(segs[sg].icon, segX + 7, 48);       // 图标居中在 14px 槽里
+        ctx.textAlign = 'left';
+        ctx.fillText(segs[sg].val, segX + 17, 48);       // 数字固定从槽后开始
+        segX += 17 + ctx.measureText(segs[sg].val).width + segGap;
+      }
 
       // 关卡与波次（中）
       ctx.textAlign = 'center';
@@ -207,20 +213,26 @@ var G = require('../boot.js');
       }
     },
 
-    // 波次开场横幅 / 消息
+    // 波次开场横幅 / 消息（支持 '\n' 换行，多行时整体居中）
     drawAnnounce: function (ctx, game) {
       if (!game.msg || game.msg.t <= 0) return;
-      var W = G.P.screenW;
+      var W = G.P.screenW, H = G.P.screenH;
       var k = game.msg.t / game.msg.life;
       var a = k > 0.8 ? (1 - k) / 0.2 : Math.min(1, k / 0.15 + 0.2);
       ctx.globalAlpha = Math.min(1, a);
-      ctx.font = 'bold 26px sans-serif';
       ctx.textAlign = 'center';
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth = 5;
-      ctx.strokeText(game.msg.text, W / 2, G.P.screenH * 0.32);
-      ctx.fillStyle = game.msg.color || '#ffd166';
-      ctx.fillText(game.msg.text, W / 2, G.P.screenH * 0.32);
+      var lines = String(game.msg.text).split('\n');
+      var lh = lines.length > 1 ? 32 : 0;
+      var startY = H * 0.32 - (lines.length - 1) * lh / 2;
+      for (var i = 0; i < lines.length; i++) {
+        var isTitle = i === 0;
+        ctx.font = isTitle ? 'bold 26px sans-serif' : 'bold 19px sans-serif';
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = isTitle ? 5 : 4;
+        ctx.strokeText(lines[i], W / 2, startY + i * lh);
+        ctx.fillStyle = game.msg.color || '#ffd166';
+        ctx.fillText(lines[i], W / 2, startY + i * lh);
+      }
       ctx.globalAlpha = 1;
     },
 
@@ -630,6 +642,22 @@ var G = require('../boot.js');
       for (var li = 0; li < lines.length; li++) {
         ctx.fillText(lines[li], W / 2, startY + (220 + li * 17) * gs);
       }
+      // 右下角设置入口
+      var gR = 21, gcx = W - 30 - gR, gcy = H - 62;
+      UI.pill(ctx, gcx - gR, gcy - gR, gR * 2, gR * 2, 'rgba(20,32,72,0.95)', gR);
+      ctx.strokeStyle = 'rgba(150,190,255,0.65)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(gcx - gR + 1, gcy - gR + 1, gR * 2 - 2, gR * 2 - 2, gR); ctx.stroke(); }
+      ctx.textAlign = 'center';
+      ctx.font = '22px sans-serif';
+      ctx.fillStyle = '#eaf2ff';
+      ctx.fillText('⚙️', gcx, gcy + 8);
+      UI.reg('settings', gcx - gR, gcy - gR, gR * 2, gR * 2, function () {
+        G.Audio.play('button');
+        game.settingsBack = 'menu';
+        game.setState('settings');
+      });
+
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
       ctx.fillText(D.VERSION + ' · 浏览器预览版（微信小游戏同源代码）', W / 2, H - 18);
@@ -1022,17 +1050,114 @@ var G = require('../boot.js');
         if (G.Audio.enabled) G.Audio.resume();
         G.P.storage.set('lx_sound', G.Audio.enabled ? 1 : 0);
       });
-      UI.button(ctx, 'restart', W / 2 - 100, H * 0.34 + 122, 200, 46, '↻ 重新开始', null, '#8e44ad', function () {
+      UI.button(ctx, 'settings', W / 2 - 100, H * 0.34 + 122, 200, 46, '⚙️ 设置', '特效强度', 'rgba(90,100,140,1)', function () {
+        G.Audio.play('button');
+        game.settingsBack = 'paused';
+        game.setState('settings');
+      });
+      UI.button(ctx, 'restart', W / 2 - 100, H * 0.34 + 180, 200, 46, '↻ 重新开始', null, '#8e44ad', function () {
         game.startRun();
       });
-      UI.button(ctx, 'quit', W / 2 - 100, H * 0.34 + 180, 200, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
+      UI.button(ctx, 'quit', W / 2 - 100, H * 0.34 + 238, 200, 46, '🏠 回到主页', null, 'rgba(90,100,140,1)', function () {
         game.setState('menu');
+      });
+    },
+
+    // ================= 设置 =================
+    sliderRect: function () { return UI._slider || null; },
+    setFx: function (v) {
+      v = Math.max(0, Math.min(1, v));
+      G.Meta.fx = v;
+    },
+    setFxFromX: function (x) {
+      var s = UI._slider;
+      if (!s) return;
+      UI.setFx((x - s.x) / s.w);
+    },
+
+    drawSettings: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      ctx.fillStyle = 'rgba(5,8,22,0.94)';
+      ctx.fillRect(0, 0, W, H);
+      UI.reg('set_block', 0, 0, W, H, function () { });   // 吞掉点到面板外的点击
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('⚙️ 设置', W / 2, H * 0.16);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText('拖动滑块调整；越低越安静，越高越炸裂', W / 2, H * 0.16 + 24);
+
+      var pw = Math.min(330, W - 40), px = (W - pw) / 2;
+      var py = H * 0.26, ph = 182;
+      ctx.fillStyle = 'rgba(20,28,60,0.92)';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
+      else ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = 'rgba(130,170,255,0.35)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.stroke(); }
+
+      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#cfe3ff';
+      ctx.fillText('特效强度', px + 24, py + 34);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText(Math.round(v * 100) + '%', px + pw - 24, py + 34);
+
+      // 滑轨 + 旋钮
+      var tx = px + 24, tw = pw - 48, ty = py + 68, th = 10;
+      UI.pill(ctx, tx, ty, tw, th, 'rgba(0,0,0,0.5)', 5);
+      var fw = Math.max(3, tw * v);
+      var grad2 = ctx.createLinearGradient(tx, 0, tx + tw, 0);
+      grad2.addColorStop(0, '#3b6ea5');
+      grad2.addColorStop(1, '#7ef9ff');
+      ctx.fillStyle = grad2;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(tx, ty, fw, th, 5); ctx.fill(); }
+      else ctx.fillRect(tx, ty, fw, th);
+      var kx = tx + tw * v;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7ef9ff';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.stroke();
+      UI._slider = { x: tx, y: ty, w: tw, h: th };
+
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.textAlign = 'left';
+      ctx.fillText('0% 关', tx, ty + 32);
+      ctx.textAlign = 'right';
+      ctx.fillText('100% 满', tx + tw, ty + 32);
+
+      // 快捷档位
+      var presets = [['关', 0], ['弱', 0.35], ['中', 0.65], ['满', 1]];
+      var bw = (pw - 48 - 24) / 4;
+      for (var i = 0; i < presets.length; i++) {
+        (function (val, label, idx) {
+          var on = Math.abs(v - val) < 0.03;
+          UI.button(ctx, 'fxp_' + idx, px + 24 + idx * (bw + 8), py + 116, bw, 34, label, null,
+            on ? '#2d6cdf' : 'rgba(90,100,140,1)', function () {
+              UI.setFx(val);
+              G.Meta.save();
+              G.Audio.play('button');
+            });
+        })(presets[i][1], presets[i][0], i);
+      }
+
+      UI.button(ctx, 'set_back', W / 2 - 90, py + ph + 26, 180, 48, '‹ 返回', null, '#2d6cdf', function () {
+        G.Meta.save();
+        G.Audio.play('button');
+        game.setState(game.settingsBack || 'menu');
       });
     },
 
     // ================= 总绘制入口 =================
     draw: function (ctx, game) {
       UI.begin();
+      UI._slider = null;
       switch (game.state) {
         case 'menu': UI.drawMenu(ctx, game); break;
         case 'heroes': UI.drawHeroes(ctx, game); break;
@@ -1047,6 +1172,7 @@ var G = require('../boot.js');
           UI.drawLevelUp(ctx, game);
           break;
         case 'paused': UI.drawHud(ctx, game); UI.drawPaused(ctx, game); break;
+        case 'settings': UI.drawSettings(ctx, game); break;
         case 'gameover': UI.drawGameOver(ctx, game); break;
         case 'victory': UI.drawVictory(ctx, game); break;
       }

@@ -31,13 +31,18 @@ var G = require('../boot.js');
       Camera.shakePower = Math.max(Camera.shakePower * 0.5, power);
       Camera.shakeT = Math.max(Camera.shakeT, time);
     },
-    // 渲染偏移（含震屏）
+    // 渲染偏移（含震屏；震屏幅度跟随特效强度设置）
+    shakeK: function () {
+      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      if (v < 0) v = 0; if (v > 1) v = 1;
+      return 0.25 + 0.75 * v;
+    },
     ox: function () {
-      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) : 0;
+      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) * Camera.shakeK() : 0;
       return Camera.x + (Math.random() - 0.5) * s * 2;
     },
     oy: function () {
-      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) : 0;
+      var s = Camera.shakeT > 0 ? Camera.shakePower * (Camera.shakeT / 0.35) * Camera.shakeK() : 0;
       return Camera.y + (Math.random() - 0.5) * s * 2;
     }
   };
