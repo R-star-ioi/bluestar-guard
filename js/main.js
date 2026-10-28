@@ -43,6 +43,7 @@ var G = require('./boot.js');
 
     setState: function (s) {
       Game.state = s;
+      if (s === 'heroes') { Game.heroScroll = 0; Game.heroDrag = null; }
       if (s !== 'playing') {
         Game.panelHero = null;
         if (s !== 'levelup') { G.Input.joyReset(); Game.joyId = null; }
@@ -321,7 +322,12 @@ var G = require('./boot.js');
 
     // ============ 触摸路由 ============
     onWorldTouch: function (id, x, y) {
-      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'heroes' || Game.state === 'changelog' || Game.state === 'gameover' || Game.state === 'paused') return;
+      // 英雄页：空白处按下 = 开始拖动滚动（按钮在 Input 层已被拦截，不会走到这里）
+      if (Game.state === 'heroes') {
+        Game.heroDrag = { id: id, y0: y, base: Game.heroScroll || 0 };
+        return;
+      }
+      if (Game.state === 'levelup' || Game.state === 'menu' || Game.state === 'changelog' || Game.state === 'gameover' || Game.state === 'paused') return;
       // 去重：部分环境同一指针的 start 会双发，80ms 内忽略重复
       var now = Date.now();
       if (!Game._tapAt) Game._tapAt = {};
@@ -350,6 +356,13 @@ var G = require('./boot.js');
     },
 
     onWorldMove: function (id, x, y) {
+      // 英雄页：上下拖动滚动列表（上限在绘制时按内容高度夹紧）
+      if (Game.state === 'heroes') {
+        var hd = Game.heroDrag;
+        if (!hd || hd.id !== id) return;
+        Game.heroScroll = Math.max(0, hd.base + (hd.y0 - y));
+        return;
+      }
       if (Game.state !== 'playing') return;
       // 摇杆
       if (Game.joyId === id) {
@@ -373,6 +386,10 @@ var G = require('./boot.js');
     },
 
     onWorldEnd: function (id, x, y) {
+      if (Game.state === 'heroes') {
+        if (Game.heroDrag && Game.heroDrag.id === id) Game.heroDrag = null;
+        return;
+      }
       if (Game.joyId === id) {
         Game.joyId = null;
         G.Input.joyReset();

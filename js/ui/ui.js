@@ -87,13 +87,19 @@ var G = require('../boot.js');
       ctx.textAlign = 'center';
       ctx.fillText(Math.ceil(pl.hp) + '/' + Math.round(pl.maxHp), 20 + hpw / 2, 28.5);
 
-      // 击杀 / 时间
+      // 击杀 / 时间 / 加成 + 场上英雄（按实测宽度顺排，不再写死坐标撞在一起）
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.textAlign = 'left';
       var wAtk = G.Player.stats && G.Player.stats.waveAtk ? Math.round(G.Player.stats.waveAtk * 100) : 0;
-      ctx.fillText('☠ ' + game.kills + '   ⏱ ' + U.fmtTime(game.playTime) + '   ⚔ +' + wAtk + '%', 22, 48);
-      ctx.fillText('👥 ' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT, 110, 48);
+      var hS1 = '☠' + game.kills + '  ⏱' + U.fmtTime(game.playTime) + '  ⚔+' + wAtk + '%';
+      var hS2 = '👥' + G.Hero.list.length + '/' + D.HERO.MAX_COUNT;
+      var hW1 = ctx.measureText(hS1).width + ctx.measureText(hS2).width + 14;
+      if (22 + hW1 > W * 0.47) ctx.font = '9px sans-serif';   // 窄屏降一号，保证不压到中间波次文字
+      hW1 = ctx.measureText(hS1).width;
+      ctx.fillText(hS1, 22, 48);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText(hS2, 22 + hW1 + 14, 48);
 
       // 关卡与波次（中）
       ctx.textAlign = 'center';
@@ -107,18 +113,15 @@ var G = require('../boot.js');
         ctx.fillText(lbl.boss ? '⚠ BOSS 波即将来袭' : lbl.txt, W / 2, 47);
       }
 
-      // 右上资源栏：钻石 + 局内金币
-      UI.pill(ctx, W - 192, 18, 62, 24, 'rgba(0,0,0,0.45)', 12);
-      UI.drawDiamond(ctx, W - 180, 30, 7);
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillStyle = '#7ef9ff';
-      ctx.textAlign = 'center';
-      ctx.fillText(String(G.Meta.diamonds), W - 150, 34);
-      UI.pill(ctx, W - 126, 18, 62, 24, 'rgba(0,0,0,0.45)', 12);
-      UI.drawCoin(ctx, W - 114, 30, 7);
+      // 右上资源栏：只显示局内金币（钻石是局外资源，回主界面才展示）
+      var gw = 74;
+      var gx = W - 60 - gw;
+      UI.pill(ctx, gx, 18, gw, 24, 'rgba(0,0,0,0.45)', 12);
+      UI.drawCoin(ctx, gx + 15, 30, 7);
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#ffd700';
-      ctx.fillText(String(game.gold), W - 84, 34);
+      ctx.textAlign = 'center';
+      ctx.fillText(String(game.gold), gx + gw / 2 + 8, 34);
 
       // 暂停按钮
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -168,21 +171,26 @@ var G = require('../boot.js');
         game.repairBase();
       }, !needRepair || game.gold < repairCost);
 
-      // 附加技能栏
+      // 附加技能栏（整体居中）
       var owned = Object.keys(G.Skills.owned);
-      for (var si = 0; si < owned.length; si++) {
-        var sid = owned[si];
-        var sui = UI.SKILL_UI[sid];
-        var slv = G.Skills.owned[sid];
-        var px0 = 10 + si * 66, py0 = H - bh - 34;
-        UI.pill(ctx, px0, py0, 62, 20, 'rgba(10,16,40,0.8)', 10);
-        ctx.strokeStyle = sui.color;
-        ctx.lineWidth = 1;
-        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px0 + 0.5, py0 + 0.5, 61, 19, 10); ctx.stroke(); }
-        ctx.fillStyle = sui.color;
-        ctx.font = 'bold 10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(sui.ch + ' ' + slv + (slv >= 5 ? '★' : ''), px0 + 31, py0 + 14);
+      if (owned.length) {
+        var spw = 62, sgap = 4;
+        var sTotal = owned.length * spw + (owned.length - 1) * sgap;
+        var sx0 = (W - sTotal) / 2;
+        for (var si = 0; si < owned.length; si++) {
+          var sid = owned[si];
+          var sui = UI.SKILL_UI[sid];
+          var slv = G.Skills.owned[sid];
+          var px0 = sx0 + si * (spw + sgap), py0 = H - bh - 34;
+          UI.pill(ctx, px0, py0, spw, 20, 'rgba(10,16,40,0.8)', 10);
+          ctx.strokeStyle = sui.color;
+          ctx.lineWidth = 1;
+          if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px0 + 0.5, py0 + 0.5, spw - 1, 19, 10); ctx.stroke(); }
+          ctx.fillStyle = sui.color;
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(sui.ch + ' ' + slv + (slv >= 5 ? '★' : ''), px0 + spw / 2, py0 + 14);
+        }
       }
 
       // 摇杆
@@ -651,16 +659,29 @@ var G = require('../boot.js');
       ctx.fillText('升级金币 ' + G.Meta.gold, W - 70, 35);
 
       var B = D.META.BONUS;
-      var ch = 126, gap = 8;
-      var y0 = 64;
-      for (var i = 0; i < D.META.PROTO_ORDER.length; i++) {
-        var cls = D.META.PROTO_ORDER[i];
+      var list = D.META.PROTO_ORDER;
+      var ch = 140, gap = 10, y0 = 64;
+      var viewTop = 58;
+      var contentH = y0 + list.length * (ch + gap);
+      var maxScroll = Math.max(0, contentH - H + 16);
+      var sy = Math.min(Math.max(0, game.heroScroll || 0), maxScroll);
+      game.heroScroll = sy;
+
+      // 列表区：可上下拖动滚动
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, viewTop, W, H - viewTop);
+      ctx.clip();
+
+      for (var i = 0; i < list.length; i++) {
+        var cls = list[i];
         var p = D.PROTOS[cls];
         var unlocked = !!G.Meta.unlocked[cls];
         var lv = G.Meta.levelOf(cls);
         var st = G.Meta.protoStats(cls);
         var selected = G.Meta.selected === cls;
-        var y = y0 + i * (ch + gap);
+        var y = y0 + i * (ch + gap) - sy;
+        if (y + ch < viewTop || y > H) continue;   // 完全滚出视野：不画也不注册按钮
         var cw = W - 24, x = 12;
 
         // 卡片底
@@ -684,60 +705,58 @@ var G = require('../boot.js');
           else ctx.fillRect(x, y, cw, ch);
         }
 
-        // 图标 + 名称
+        // 右侧操作列（升级在上、选择在下，不再压住说明文字）
+        var bw2 = 92, bh2 = 40;
+        var bx2 = x + cw - bw2 - 14;
+        var txW = Math.max(80, bx2 - (x + 62) - 12);
+
+        // 图标 + 名称 + 简介
         ctx.globalAlpha = unlocked ? 1 : 0.35;
-        G.Hero.drawIcon(ctx, cls, x + 34, y + 38, 1.5);
+        G.Hero.drawIcon(ctx, cls, x + 34, y + 40, 1.5);
         ctx.textAlign = 'left';
         ctx.font = 'bold 16px sans-serif';
         ctx.fillStyle = '#fff';
         ctx.fillText(p.name, x + 62, y + 30);
         ctx.font = '11px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.fillText(p.desc, x + 62, y + 48);
+        ctx.fillText(p.desc, x + 62, y + 48, txW);
         // 属性（基础+升级合成）
         ctx.font = '12px sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.88)';
-        var aps = (1 / st.interval).toFixed(1);
-        ctx.fillText('生命 ' + st.maxHp + '   攻击 ' + st.dmg.toFixed(1) + '   攻速 ' + aps + '/s', x + 62, y + 70);
+        ctx.fillText('生命 ' + st.maxHp + '   攻击 ' + st.dmg.toFixed(1) + '   攻速 ' + (1 / st.interval).toFixed(1) + '/s', x + 62, y + 72, txW);
+        // 等级与加成（拆两行，宽度受限自动压缩，不会伸到按钮下面）
         if (unlocked) {
           var k = lv - 1;
           ctx.font = '11px sans-serif';
           ctx.fillStyle = '#7bed9f';
-          ctx.fillText(k > 0 ? ('Lv' + lv + ' · 生命+' + Math.round(B.hp * k * 100) + '% 攻击+' + Math.round(B.dmg * k * 100) + '% 攻速+' + Math.round(B.aspeed * k * 100) + '%') : 'Lv1 · 基础形态', x + 62, y + 90);
+          if (k > 0) {
+            ctx.fillText('Lv' + lv + ' · 生命+' + Math.round(B.hp * k * 100) + '%   攻击+' + Math.round(B.dmg * k * 100) + '%', x + 62, y + 92, txW);
+            ctx.font = '10px sans-serif';
+            ctx.fillText('攻速+' + Math.round(B.aspeed * k * 100) + '%   移速+' + Math.round(B.speed * k * 100) + '%', x + 62, y + 110, txW);
+          } else {
+            ctx.fillText('Lv1 · 基础形态', x + 62, y + 92);
+          }
         } else {
           ctx.font = '11px sans-serif';
           ctx.fillStyle = '#ffd166';
-          ctx.fillText('🔒 未解锁', x + 62, y + 90);
+          ctx.fillText('🔒 未解锁', x + 62, y + 92);
         }
         ctx.globalAlpha = 1;
 
         // 按钮
-        var bw = 96, bh = 40;
-        var by = y + ch - bh - 10;
         if (!unlocked) {
           var uc = G.Meta.unlockCost(cls);
-          UI.button(ctx, 'unl_' + cls, x + cw - bw - 14, y + (ch - bh) / 2, bw, bh, '解锁', '💰' + uc, '#8e44ad', (function (c) {
+          UI.button(ctx, 'unl_' + cls, bx2, y + (ch - bh2) / 2, bw2, bh2, '解锁', '💰' + uc, '#8e44ad', (function (c) {
             return function () {
               if (G.Meta.unlock(c)) game.toast('已解锁 ' + D.PROTOS[c].name + '！');
               else game.toast('升级金币不足');
             };
           })(cls), G.Meta.gold < uc);
         } else {
-          // 选择
-          if (selected) {
-            ctx.textAlign = 'center';
-            ctx.font = 'bold 13px sans-serif';
-            ctx.fillStyle = '#ffd166';
-            ctx.fillText('✓ 使用中', x + cw - bw - 14 + bw / 2, by + bh / 2 + 4);
-          } else {
-            UI.button(ctx, 'sel_' + cls, x + cw - bw - 14, by, bw, bh, '选择', null, '#2d6cdf', (function (c) {
-              return function () { G.Meta.select(c); };
-            })(cls));
-          }
-          // 升级
+          // 升级（在上）
           var maxed = lv >= D.META.MAX_LV;
           var upCost = G.Meta.upgradeCost(cls);
-          UI.button(ctx, 'mup_' + cls, x + cw - bw * 2 - 24, by, bw, bh, '升级',
+          UI.button(ctx, 'mup_' + cls, bx2, y + 24, bw2, bh2, '升级',
             maxed ? '已满级' : '💰' + upCost, '#27ae60',
             (function (c) {
               return function () {
@@ -745,7 +764,27 @@ var G = require('../boot.js');
                 else game.toast('升级金币不足');
               };
             })(cls), maxed || G.Meta.gold < upCost);
+          // 选择（在下）
+          if (selected) {
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillStyle = '#ffd166';
+            ctx.fillText('✓ 使用中', bx2 + bw2 / 2, y + 24 + bh2 + 34);
+          } else {
+            UI.button(ctx, 'sel_' + cls, bx2, y + 78, bw2, bh2, '选择', null, '#2d6cdf', (function (c) {
+              return function () { G.Meta.select(c); };
+            })(cls));
+          }
         }
+      }
+      ctx.restore();
+
+      // 滚动条（内容超出才显示）
+      if (maxScroll > 0) {
+        var trackY = viewTop + 4, trackH = H - trackY - 10;
+        var thumbH = Math.max(30, trackH * (H - viewTop) / contentH);
+        var thumbY = trackY + (trackH - thumbH) * (sy / maxScroll);
+        UI.pill(ctx, W - 5, thumbY, 3, thumbH, 'rgba(130,170,255,0.45)', 2);
       }
     },
 
