@@ -188,9 +188,9 @@ var G = require('../boot.js');
       var ex = sx + Player.face * 4;
       ctx.fillRect(ex - 3.5, sy - 4 + bob, 3, 3.5);
       ctx.fillRect(ex + 1.5, sy - 4 + bob, 3, 3.5);
-      // 武器：装了武器就画武器图（握在身前侧），没装就画职业默认的矢量武器
+      // 武器：装了武器就画武器图（朝哪边就镜像到哪边），没装就画职业默认的矢量武器
       var eqw = (G.Weapon ? G.Weapon.equipped(Player.cls) : null);
-      var drewEq = eqw ? G.Weapon.drawHeld(ctx, sx + Player.face * 14, sy + bob, 46, eqw, Player.face * 0.12) : false;
+      var drewEq = eqw ? G.Weapon.drawHeld(ctx, sx + Player.face * 14, sy + bob, 46, eqw, 0.12, Player.face > 0) : false;
       if (!drewEq) {
         if (Player.proto && Player.proto.melee) {
           // 剑

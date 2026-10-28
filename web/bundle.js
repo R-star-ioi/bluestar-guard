@@ -691,6 +691,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.9', title: '武器朝向修复', lines: ['主角朝右时武器没有镜像，弓箭方向是反的', '现在朝哪边就镜像到哪边；英雄的弓也统一朝外'] },
     { ver: 'v0.5.8', title: '武器外观', lines: ['装备的武器会显示在角色手上（按品质取图，紫/红带光晕）', '武器图新增透明底版本，游戏内用抠图、卡面用带背景版'] },
     { ver: 'v0.5.7', title: '兑换码', lines: ['设置页新增兑换码输入', 'lxsw666 → 99999 钻石（每个码只能用一次）'] },
     { ver: 'v0.5.6', title: '武器与抽卡', lines: ['英雄页新增「武器」按钮，可装备/卸下（目前开放弓手）', '主界面新增「背包」与「抽武器」', '品质白→绿→蓝→紫→红，三个同阶合一阶，两个同星红合高一星', '抽卡 60 钻/次：白80% 绿10% 蓝6% 紫3% 红1%，带翻卡动画'] },
@@ -727,7 +728,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.8';
+  D.VERSION = 'v0.5.9';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -982,8 +983,9 @@ var G = require('../boot.js');
       return G.P.loadImage('assets/weapons/' + cls + '_' + TIERS[tier].key + '_cut.png');
     },
 
-    // 在角色身上画手持武器；h = 显示高度（px）。返回是否真的画了
-    drawHeld: function (ctx, cx, cy, h, w, rot) {
+    // 在角色身上画手持武器；h = 显示高度（px）
+    // flip=true 时水平镜像（角色朝右时用，弓/箭方向才不会反）
+    drawHeld: function (ctx, cx, cy, h, w, rot, flip) {
       if (!w) return false;
       var rec = Weapon.heldImg(w.cls, w.tier);
       if (!rec || !rec.ready || !rec.img) return false;
@@ -992,6 +994,7 @@ var G = require('../boot.js');
       var dh = h, dw = iw * (h / ih);
       ctx.save();
       ctx.translate(cx, cy);
+      if (flip) ctx.scale(-1, 1);
       if (rot) ctx.rotate(rot);
       // 紫/红品质带一点光晕，跟着特效强度走
       if (w.tier >= 3) {
@@ -1899,9 +1902,9 @@ var G = require('../boot.js');
       var ex = sx + Player.face * 4;
       ctx.fillRect(ex - 3.5, sy - 4 + bob, 3, 3.5);
       ctx.fillRect(ex + 1.5, sy - 4 + bob, 3, 3.5);
-      // 武器：装了武器就画武器图（握在身前侧），没装就画职业默认的矢量武器
+      // 武器：装了武器就画武器图（朝哪边就镜像到哪边），没装就画职业默认的矢量武器
       var eqw = (G.Weapon ? G.Weapon.equipped(Player.cls) : null);
-      var drewEq = eqw ? G.Weapon.drawHeld(ctx, sx + Player.face * 14, sy + bob, 46, eqw, Player.face * 0.12) : false;
+      var drewEq = eqw ? G.Weapon.drawHeld(ctx, sx + Player.face * 14, sy + bob, 46, eqw, 0.12, Player.face > 0) : false;
       if (!drewEq) {
         if (Player.proto && Player.proto.melee) {
           // 剑
@@ -3012,10 +3015,10 @@ var G = require('../boot.js');
         // 职业图标（矢量绘制，不依赖 emoji 字体）
         Hero.drawIcon(ctx, h.cls, sx, sy + bob - 2);
 
-        // 已装备武器：挎在右手边（贴着身体外侧，不挡图标）
+        // 已装备武器：挎在右手边，箭头朝外（镜像）
         if (G.Weapon) {
           var eqw = G.Weapon.equipped(h.cls);
-          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25);
+          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25, true);
         }
 
         // 等级徽章

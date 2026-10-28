@@ -257,10 +257,10 @@ var G = require('../boot.js');
         // 职业图标（矢量绘制，不依赖 emoji 字体）
         Hero.drawIcon(ctx, h.cls, sx, sy + bob - 2);
 
-        // 已装备武器：挎在右手边（贴着身体外侧，不挡图标）
+        // 已装备武器：挎在右手边，箭头朝外（镜像）
         if (G.Weapon) {
           var eqw = G.Weapon.equipped(h.cls);
-          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25);
+          if (eqw) G.Weapon.drawHeld(ctx, sx + 21, sy + bob + 2, 36, eqw, 0.25, true);
         }
 
         // 等级徽章

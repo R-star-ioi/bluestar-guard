@@ -32,8 +32,9 @@ var G = require('../boot.js');
       return G.P.loadImage('assets/weapons/' + cls + '_' + TIERS[tier].key + '_cut.png');
     },
 
-    // 在角色身上画手持武器；h = 显示高度（px）。返回是否真的画了
-    drawHeld: function (ctx, cx, cy, h, w, rot) {
+    // 在角色身上画手持武器；h = 显示高度（px）
+    // flip=true 时水平镜像（角色朝右时用，弓/箭方向才不会反）
+    drawHeld: function (ctx, cx, cy, h, w, rot, flip) {
       if (!w) return false;
       var rec = Weapon.heldImg(w.cls, w.tier);
       if (!rec || !rec.ready || !rec.img) return false;
@@ -42,6 +43,7 @@ var G = require('../boot.js');
       var dh = h, dw = iw * (h / ih);
       ctx.save();
       ctx.translate(cx, cy);
+      if (flip) ctx.scale(-1, 1);
       if (rot) ctx.rotate(rot);
       // 紫/红品质带一点光晕，跟着特效强度走
       if (w.tier >= 3) {
