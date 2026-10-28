@@ -10,8 +10,9 @@
 // 旧实现（不管父提交，把工作区文件重新拼 tree）会在远端造出内容重复但 sha 不同的提交，
 // 并且上传的是 LF 换行 blob、本地是 CRLF，merge 时整文件冲突。那段代码已废弃，别改回去。
 //
-// 用法：GH_TOKEN=ghp_xxx node tools/push_via_api.js [tag] [tagMessage]
+// 用法：GH_TOKEN=ghp_xxx node tools/push_via_api.js [tag] [tagMessage] [commitSha]
 //   兼容老用法：第一个参数若是 7~40 位十六进制 sha（旧版的“远端 commit”），自动忽略。
+//   第三个参数可指定要推的本地提交（默认 HEAD）；补推长提交链时从老到新逐个调用。
 // 前置：父提交必须已在远端（远端 main 是本地祖先，或先把 tag 推上去）。
 var cp = require('child_process');
 var https = require('https');
@@ -25,6 +26,7 @@ if (args.length && /^[0-9a-f]{7,40}$/i.test(args[0])) {
 }
 var TAG = args[0] || null;
 var TAG_MSG = args[1] || (TAG ? TAG + ' 发布' : null);
+var TARGET = args[2] || 'HEAD';   // 要推送的本地提交
 
 function git(a, raw) {
   return cp.execFileSync('git', a, { maxBuffer: 256 * 1024 * 1024, encoding: raw ? 'buffer' : 'utf8' });
@@ -112,7 +114,7 @@ function changedEntries(parent, sha) {
 }
 
 function run() {
-  var sha = git(['rev-parse', 'HEAD']).trim();
+  var sha = git(['rev-parse', TARGET]).trim();
   var c = parseCommit(sha);
   var parent = c.parents[0];
   if (!parent) throw new Error('根提交不支持，请先手动推一次');
