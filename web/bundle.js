@@ -517,11 +517,13 @@ var G = require('../boot.js');
 
   // 敌人基础属性（会被波次成长系数放大）
   D.ENEMIES = {
-    slime: { hp: 22, speed: 62, dmg: 8, radius: 13, coin: 2, gem: 1, color: '#e74c3c', name: '史莱姆' },
-    fast: { hp: 14, speed: 108, dmg: 6, radius: 11, coin: 3, gem: 1, color: '#ff7f50', name: '疾行虫' },
-    tank: { hp: 95, speed: 36, dmg: 16, radius: 20, coin: 6, gem: 2, color: '#9b59b6', name: '装甲胖' },
-    shooter: { hp: 34, speed: 50, dmg: 10, radius: 14, coin: 5, gem: 2, color: '#2ecc71', name: '毒液射手', shootRange: 240, shootInterval: 2.2, bulletSpeed: 170 }
+    slime: { hp: 22, hpRatio: 1.0, speed: 62, dmg: 8, radius: 13, coin: 2, gem: 1, color: '#e74c3c', name: '史莱姆' },
+    fast: { hp: 14, hpRatio: 0.64, speed: 108, dmg: 6, radius: 11, coin: 3, gem: 1, color: '#ff7f50', name: '疾行虫' },
+    tank: { hp: 95, hpRatio: 4.3, speed: 36, dmg: 16, radius: 20, coin: 6, gem: 2, color: '#9b59b6', name: '装甲胖' },
+    shooter: { hp: 34, hpRatio: 1.5, speed: 50, dmg: 10, radius: 14, coin: 5, gem: 2, color: '#2ecc71', name: '毒液射手', shootRange: 240, shootInterval: 2.2, bulletSpeed: 170 }
   };
+  // ★ 怪物基础血量（v0.5.14）：小怪基准 500，按 hpRatio 保留类型差异；精英/Boss 用绝对值
+  D.ENEMY_HP_BASE = 500;
   D.ENEMY_BULLET_SPEED = 170;
 
   // 波次成长
@@ -551,10 +553,10 @@ var G = require('../boot.js');
     ATK_BOSS_BONUS: 0.08   // Boss 波清算额外 +8%（共 +12%）
   };
 
-  // 精英 / Boss 倍率
-  D.ELITE = { DPS_MULT: 7, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 }; // 血量=主角DPS×7
+  // 精英 / Boss 倍率（血量改为绝对值基线 × 波次/关卡倍率，不再按主角 DPS 定价）
+  D.ELITE = { HP_BASE: 3500, SPEED: 0.9, SIZE: 1.7, COIN: 15, GEM: 8, RADIUS: 1.7 };
   D.BOSS = {
-    DPS_MULT: 15, SPEED: 34, DMG: 25, RADIUS: 44, // 血量=主角DPS×15
+    HP_BASE: 15000, SPEED: 34, DMG: 25, RADIUS: 44,
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
@@ -701,6 +703,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.14', title: '怪物血量重做', lines: ['小怪基础 500 / 精英 3500 / Boss 15000，不再一箭秒', '精英与 Boss 血量改为固定基线，不再随你的装备浮动', '波内与关间成长重新标定，后期压迫感更强'] },
     { ver: 'v0.5.13', title: 'HUD 调整', lines: ['波次倒计时移到屏幕上方，字号放大一倍，不再挡住左上战绩', '波次间隔改为 5 秒', '左上角新增当前主角 DPS 秒伤'] },
     { ver: 'v0.5.12', title: '武器战斗效果', lines: ['五档品质各有独立效果：穿透、冰霜冻结、暗影分裂、炎爆灼烧', '红色按星级进阶：2★灼烧强化 3★火焰轨迹 4★双重炎爆+图腾 5★焚天箭雨', '武器属性改为真实加成（攻击/攻速/暴击率/暴击伤害/射程）'] },
     { ver: 'v0.5.11', title: '英雄不再持械', lines: ['招募来的英雄只显示职业图标，不再跟着拿当前装备的武器', '装备的武器只显示在玩家操控的主角身上'] },
@@ -728,11 +731,14 @@ var G = require('../boot.js');
   D.LEVELS = {
     TOTAL: 50,
     WAVES: 20,             // 每关波次
-    HP_WAVE: 1.125,        // 波内血量：每波×1.125（第20波≈开局9.4倍）
+    // 波内血量成长：需求是"每波 +50%"，但 1.5^19 = 2217，第 1 关第 20 波就是 110 万血，
+    // 红 5★ 要打近一小时一只。实测改为 1.12（20 波 ≈ 8.6 倍），配合基础值 500 已经比旧版厚 22 倍
+    HP_WAVE: 1.12,
     BUDGET_WAVE: 1.13,     // 波内数量预算：每波×1.13
     LATE_FROM: 15,         // 尾段陡增起始波：15~20 波额外加速（体感"最后一波很硬"）
     LATE_RATE: 1.05,       // 尾段每波额外 ×1.05（15→20 共 ×1.34）
-    DIFF: 1.16,            // 关间难度基数（血量）：每关×1.16，50关≈1518倍
+    // 关间难度：需求是"每关 2 倍"，但 2^49 是 5.6e14 倍，50 关不可能；取 1.40（每关 +40%，10 关 20 倍）
+    DIFF: 1.40,
     DIFF_BUDGET_POW: 0.62, // 数量预算随关间难度的缩放指数（防爆屏）
     BOSS_WAVES: [10, 20],  // 关内Boss波（20=关底Boss）
     BOX_REWARDS: [50, 100, 150], // 三档宝箱钻石：30%档/70%档/满血档
@@ -741,7 +747,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.13';
+  D.VERSION = 'v0.5.14';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -3023,9 +3029,11 @@ var G = require('../boot.js');
       var dmgG = (1 + 0.10 * (level - 1)) * Math.pow(1.04, wave - 1);
       // 产出随波次与关卡难度成长
       var lootG = (1 + D.WAVE.GOLD_GROWTH * wave) * Math.pow(diff, 0.5);
+      // 血量 = 基础值（小怪基准 500 × 类型系数）× 波次/关卡倍率
+      var baseHp = D.ENEMY_HP_BASE * (base.hpRatio || 1) * hpMult;
       var e = {
         type: type, x: x, y: y,
-        hp: base.hp * hpMult, maxHp: base.hp * hpMult,
+        hp: baseHp, maxHp: baseHp,
         speed: base.speed, dmg: base.dmg * dmgG,
         r: base.radius, coin: Math.ceil(base.coin * lootG), gem: Math.ceil(base.gem * lootG),
         color: base.color, wave: wave, level: level, hpMult: hpMult,
@@ -3040,7 +3048,7 @@ var G = require('../boot.js');
       };
       if (opts.elite) {
         e.elite = true;
-        e.hp = Math.max(60, G.Player.dps() * D.ELITE.DPS_MULT); // 精英=主角DPS×7
+        e.hp = D.ELITE.HP_BASE * Math.pow(hpMult, 0.85);   // 精英基础 3500，成长略缓于小怪
         e.maxHp = e.hp;
         e.speed *= D.ELITE.SPEED; e.r *= D.ELITE.RADIUS;
         e.coin = Math.ceil(D.ELITE.COIN * lootG); e.gem = Math.ceil(D.ELITE.GEM * lootG);
@@ -3048,7 +3056,7 @@ var G = require('../boot.js');
       }
       if (opts.boss) {
         e.boss = true;
-        e.hp = Math.max(300, G.Player.dps() * D.BOSS.DPS_MULT); // Boss=主角DPS×15
+        e.hp = D.BOSS.HP_BASE * Math.pow(hpMult, 0.7);     // Boss 基础 15000，成长更缓（否则第 20 波要打一分半）
         e.maxHp = e.hp;
         e.speed = D.BOSS.SPEED; e.dmg = D.BOSS.DMG; e.r = D.BOSS.RADIUS;
         e.coin = Math.ceil(D.BOSS.COIN * lootG); e.gem = Math.ceil(D.BOSS.GEM * lootG);

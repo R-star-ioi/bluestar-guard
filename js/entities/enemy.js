@@ -44,9 +44,11 @@ var G = require('../boot.js');
       var dmgG = (1 + 0.10 * (level - 1)) * Math.pow(1.04, wave - 1);
       // 产出随波次与关卡难度成长
       var lootG = (1 + D.WAVE.GOLD_GROWTH * wave) * Math.pow(diff, 0.5);
+      // 血量 = 基础值（小怪基准 500 × 类型系数）× 波次/关卡倍率
+      var baseHp = D.ENEMY_HP_BASE * (base.hpRatio || 1) * hpMult;
       var e = {
         type: type, x: x, y: y,
-        hp: base.hp * hpMult, maxHp: base.hp * hpMult,
+        hp: baseHp, maxHp: baseHp,
         speed: base.speed, dmg: base.dmg * dmgG,
         r: base.radius, coin: Math.ceil(base.coin * lootG), gem: Math.ceil(base.gem * lootG),
         color: base.color, wave: wave, level: level, hpMult: hpMult,
@@ -61,7 +63,7 @@ var G = require('../boot.js');
       };
       if (opts.elite) {
         e.elite = true;
-        e.hp = Math.max(60, G.Player.dps() * D.ELITE.DPS_MULT); // 精英=主角DPS×7
+        e.hp = D.ELITE.HP_BASE * Math.pow(hpMult, 0.85);   // 精英基础 3500，成长略缓于小怪
         e.maxHp = e.hp;
         e.speed *= D.ELITE.SPEED; e.r *= D.ELITE.RADIUS;
         e.coin = Math.ceil(D.ELITE.COIN * lootG); e.gem = Math.ceil(D.ELITE.GEM * lootG);
@@ -69,7 +71,7 @@ var G = require('../boot.js');
       }
       if (opts.boss) {
         e.boss = true;
-        e.hp = Math.max(300, G.Player.dps() * D.BOSS.DPS_MULT); // Boss=主角DPS×15
+        e.hp = D.BOSS.HP_BASE * Math.pow(hpMult, 0.7);     // Boss 基础 15000，成长更缓（否则第 20 波要打一分半）
         e.maxHp = e.hp;
         e.speed = D.BOSS.SPEED; e.dmg = D.BOSS.DMG; e.r = D.BOSS.RADIUS;
         e.coin = Math.ceil(D.BOSS.COIN * lootG); e.gem = Math.ceil(D.BOSS.GEM * lootG);
