@@ -91,10 +91,17 @@ var G = require('../boot.js');
       var boss = Waves.isBossWave(Waves.wave);
       game.onWaveStart(Waves.level, Waves.wave, boss);
       if (boss) {
-        var p = Waves.spawnPoint(game);
-        G.Enemy.spawn(game, 'slime', p.x, p.y, { level: Waves.level, wave: Waves.wave, boss: true });
+        if (Waves.wave === D.LEVELS.WAVES && G.Devourer) {
+          // 关底 Boss：世界吞噬者（多体节蠕虫）
+          G.Devourer.spawn(game, Waves.level);
+          game.showMsg('⚠ 世界吞噬者来袭', '#ff6b6b', 2.5);
+          G.Camera.shake(9, 0.8);
+        } else {
+          var p = Waves.spawnPoint(game);
+          G.Enemy.spawn(game, 'slime', p.x, p.y, { level: Waves.level, wave: Waves.wave, boss: true });
+          G.Camera.shake(6, 0.5);
+        }
         G.Audio.play('boss');
-        G.Camera.shake(6, 0.5);
       }
     },
 

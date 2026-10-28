@@ -22,6 +22,7 @@ var FILES = [
   'js/entities/player.js',
   'js/entities/skills.js',
   'js/entities/enemy.js',
+  'js/entities/devourer.js',
   'js/entities/hero.js',
   'js/systems/waves.js',
   'js/ui/ui.js',

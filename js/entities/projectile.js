@@ -125,7 +125,7 @@ var G = require('../boot.js');
         var d = Math.sqrt(U.dist2(p.x, p.y, e.x, e.y));
         if (d <= p.splash + e.r) {
           var k = 1 - Math.min(1, d / (p.splash + e.r)) * 0.5;
-          game.damageEnemy(e, p.dmg * k, e.x, e.y, true);
+          game.damageEnemy(e, p.dmg * k, e.x, e.y, true, { aoe: true });
         }
       }
     },

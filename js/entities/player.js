@@ -25,6 +25,7 @@ var G = require('../boot.js');
       Player.dead = false;
       Player.attackTimer = 0;
       Player.face = 1;
+      Player.noHealT = 0; Player.slowDebuffT = 0; Player.vulnT = 0;   // 吞噬者减益
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
       Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
       // 武器战斗状态（灼烧/场效果/箭雨蓄能）
@@ -43,7 +44,7 @@ var G = require('../boot.js');
       return a;
     },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
-    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) * (Player.slowDebuffT > 0 ? 0.9 : 1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
     // 暴击率：局内技能（每点 8%）+ 武器暴击率
     critRate: function () {
       var ws = Player.proto.weapon;
@@ -67,6 +68,10 @@ var G = require('../boot.js');
 
     update: function (dt, game) {
       if (Player.dead) return;
+      // 吞噬者减益倒计时（互相独立）
+      if (Player.noHealT > 0) Player.noHealT -= dt;
+      if (Player.slowDebuffT > 0) Player.slowDebuffT -= dt;
+      if (Player.vulnT > 0) Player.vulnT -= dt;
       // 移动（摇杆）
       var j = G.Input.joystick;
       var vx = 0, vy = 0;
@@ -187,6 +192,7 @@ var G = require('../boot.js');
         dmg = G.Skills.absorbDamage(dmg, game);
         if (dmg <= 0.01) return;
       }
+      if (Player.vulnT > 0) dmg *= 1.2;   // 吞噬者减益：受到的伤害更疼
       Player.hp -= dmg;
       G.FX.text(Player.x, Player.y - 22, '-' + Math.round(dmg), '#ff6b6b', 13);
       G.FX.burst(Player.x, Player.y, 4, '#ff5252', 100, 0.35, 3);
@@ -200,11 +206,23 @@ var G = require('../boot.js');
 
     heal: function (v) {
       if (Player.dead) return;
+      // 吞噬者减益：无法治疗
+      if (Player.noHealT > 0) {
+        G.FX.text(Player.x, Player.y - 26, '无法治疗', '#ff6b6b', 11);
+        return;
+      }
       var real = Math.min(Player.maxHp - Player.hp, v);
       if (real > 0.5) {
         G.FX.text(Player.x, Player.y - 24, '+' + Math.round(real), '#7bed9f', 12);
       }
       Player.hp = Math.min(Player.maxHp, Player.hp + v);
+    },
+
+    // 世界吞噬者的攻击命中后施加三个独立减益
+    applyWormDebuff: function () {
+      Player.noHealT = 10;        // 无法治疗 10s
+      Player.slowDebuffT = 5;     // 移速 -10% 5s
+      Player.vulnT = 5;           // 受到的伤害 +20% 5s
     },
 
     draw: function (ctx, ox, oy) {

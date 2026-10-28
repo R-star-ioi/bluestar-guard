@@ -70,6 +70,30 @@ var G = require('../boot.js');
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
+  // ★ 世界吞噬者（每关第 20 波关底蠕虫 Boss，v0.5.15）
+  D.DEVOURER = {
+    SEG_COUNT: 72,         // 体节数
+    SPEED_RATIO: 0.85,     // 速度 = 玩家速度 × 0.85
+    DASH_DMG: 55,          // 冲撞
+    SPIT_DMG: 15,          // 魔唾液命中
+    POOL_DMG: 10,          // 魔唾液落地的酸液
+    TOUCH_DMG: 5,          // 碰到身体
+    RESIST: 0.20,          // 全伤害减免 20%
+    AOE_RESIST: 0.80,      // 爆炸/范围类伤害额外减免 80%
+    DASH_CD: 6,            // 冲撞冷却
+    SPIT_SPEED: 175,
+    // 基础总血量：L1 50万 / L2 500万 / L3 5000万 / L4 5500万，L5 起每关 ×1.5
+    HP_BASE: [500000, 5000000, 50000000, 55000000],
+    HP_GROW: 1.5,
+    hpOf: function (lv) {
+      var t = D.DEVOURER.HP_BASE;
+      if (lv <= t.length) return t[lv - 1];
+      return t[t.length - 1] * Math.pow(D.DEVOURER.HP_GROW, lv - t.length);
+    },
+    BGM: 'Music/世界吞噬者.mp3',
+    BGM_VOL: 0.6
+  };
+
   // 掉落
   D.DROPS = {
     COIN_VALUE: 1,
@@ -213,6 +237,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.15', title: '世界吞噬者', lines: ['第 20 波关底 Boss 换成蠕虫「世界吞噬者」：72 体节，打碎一节就分裂成多条', '它存活期间循环播放专属 BGM（60% 音量）', '会冲撞与喷吐魔唾液，命中会禁疗 / 减速 / 易伤', '受到的所有伤害 -20%，爆炸类再 -80%，请别指望炎爆速刷'] },
     { ver: 'v0.5.14', title: '怪物血量重做', lines: ['小怪基础 500 / 精英 3500 / Boss 15000，不再一箭秒', '精英与 Boss 血量改为固定基线，不再随你的装备浮动', '波内与关间成长重新标定，后期压迫感更强'] },
     { ver: 'v0.5.13', title: 'HUD 调整', lines: ['波次倒计时移到屏幕上方，字号放大一倍，不再挡住左上战绩', '波次间隔改为 5 秒', '左上角新增当前主角 DPS 秒伤'] },
     { ver: 'v0.5.12', title: '武器战斗效果', lines: ['五档品质各有独立效果：穿透、冰霜冻结、暗影分裂、炎爆灼烧', '红色按星级进阶：2★灼烧强化 3★火焰轨迹 4★双重炎爆+图腾 5★焚天箭雨', '武器属性改为真实加成（攻击/攻速/暴击率/暴击伤害/射程）'] },
@@ -257,7 +282,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.14';
+  D.VERSION = 'v0.5.15';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {

@@ -94,6 +94,7 @@ var G = require('../boot.js');
       for (i = list.length - 1; i >= 0; i--) {
         e = list[i];
         if (e.dead) { list.splice(i, 1); continue; }
+        if (e.isWorm) { Enemy.updateWormNode(e, dt, game); continue; }   // 蠕虫体节由 Devourer 驱动
         if (e.hitT > 0) e.hitT -= dt;
         e.wobT += dt;
         if (e.orbT > 0) e.orbT -= dt;
@@ -233,6 +234,38 @@ var G = require('../boot.js');
       }
     },
 
+    // 蠕虫体节：移动/攻击由 Devourer 驱动，这里只结算受击闪、灼烧与击退
+    updateWormNode: function (e, dt, game) {
+      if (e.hitT > 0) e.hitT -= dt;
+      if (e.slowT > 0) e.slowT -= dt;
+      if (e.freezeT > 0) e.freezeT -= dt;
+      if (e.chillT > 0) e.chillT -= dt;
+      if (e.kbX || e.kbY) {
+        e.x += e.kbX * dt; e.y += e.kbY * dt;
+        var kd = Math.pow(0.01, dt);
+        e.kbX *= kd; e.kbY *= kd;
+        if (Math.abs(e.kbX) < 2) e.kbX = 0;
+        if (Math.abs(e.kbY) < 2) e.kbY = 0;
+      }
+      if (e.burnT > 0) {
+        e.burnT -= dt;
+        var bd = (e.burnN || 0) * (e.burnDps || 0) * dt;
+        // 灼烧算火系持续伤害：吃吞噬者的 20% 减伤 + 对爆炸物 80% 减伤
+        if (e.isWorm) bd *= (1 - D.DEVOURER.RESIST) * (1 - D.DEVOURER.AOE_RESIST);
+        if (bd > 0) e.hp -= bd;
+        e.burnFx = (e.burnFx || 0) + dt;
+        if (e.burnFx > 0.5) {
+          e.burnFx = 0;
+          var tickDmg = (e.burnN || 0) * (e.burnDps || 0) * 0.5;
+          if (tickDmg >= 1) G.FX.text(e.x + U.rand(-7, 7), e.y - e.r - 3, String(Math.round(tickDmg)), '#ff9f43', 10);
+        }
+        if (e.hp <= 0) {
+          e.hp = 0;
+          Enemy.damage(game, e, 0, e.x, e.y, false, false, true);
+        }
+      }
+    },
+
     damage: function (game, e, dmg, hx, hy, big, crit, silent) {
       if (e.dead) return;
       // 暴击判定在调用方处理，这里直接扣血
@@ -259,6 +292,7 @@ var G = require('../boot.js');
       var t = Date.now() / 1000;
       for (var i = 0; i < Enemy.list.length; i++) {
         var e = Enemy.list[i];
+        if (e.isWorm) continue;   // 蠕虫由 Devourer.draw 绘制
         var sx = e.x - ox, sy = e.y - oy;
         if (sx < -60 || sy < -60 || sx > G.P.screenW + 60 || sy > G.P.screenH + 60) continue;
         var wob = Math.sin(e.wobT * 6) * 0.08;

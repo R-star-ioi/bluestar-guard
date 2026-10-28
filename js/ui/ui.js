@@ -122,6 +122,17 @@ var G = require('../boot.js');
       ctx.fillStyle = '#7ef9ff';
       ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
 
+      // 吞噬者减益（DPS 右侧顺排；纵向与 Boss 血条错开）
+      var deb = [];
+      if (pl.noHealT > 0) deb.push('禁疗 ' + Math.ceil(pl.noHealT) + 's');
+      if (pl.slowDebuffT > 0) deb.push('减速 ' + Math.ceil(pl.slowDebuffT) + 's');
+      if (pl.vulnT > 0) deb.push('易伤 ' + Math.ceil(pl.vulnT) + 's');
+      if (deb.length) {
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = '#ff8f8f';
+        ctx.fillText(deb.join('  '), 130, 70);
+      }
+
       // 关卡与波次（中）
       ctx.textAlign = 'center';
       ctx.font = 'bold 13px sans-serif';
@@ -160,10 +171,27 @@ var G = require('../boot.js');
         game.setState('paused');
       });
 
-      // Boss 血条
+      // Boss 血条（世界吞噬者优先显示）
+      var dv = (G.Devourer && G.Devourer.active) ? G.Devourer.hpInfo() : null;
       var boss = null;
-      for (var i = 0; i < G.Enemy.list.length; i++) if (G.Enemy.list[i].boss) { boss = G.Enemy.list[i]; break; }
-      if (boss) {
+      if (!dv) {
+        for (var i = 0; i < G.Enemy.list.length; i++) if (G.Enemy.list[i].boss) { boss = G.Enemy.list[i]; break; }
+      }
+      if (dv && dv.max > 0) {
+        var bw = Math.min(340, W - 90);
+        var bx = (W - bw) / 2, by = 74;
+        UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(30,4,34,0.78)', 10);
+        ctx.fillStyle = '#3a0f38';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); } else ctx.fillRect(bx, by, bw, 14);
+        ctx.fillStyle = '#b565c9';
+        var hk = Math.max(0, dv.cur / dv.max);
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * hk, 12, 6); ctx.fill(); }
+        else ctx.fillRect(bx + 1, by + 1, (bw - 2) * hk, 12);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText('世界吞噬者' + (dv.worms > 1 ? ' ×' + dv.worms : ''), W / 2, by + 11);
+      } else if (boss) {
         var bw = Math.min(320, W - 100);
         var bx = (W - bw) / 2, by = 74;
         UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(40,0,0,0.7)', 10);

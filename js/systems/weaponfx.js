@@ -65,7 +65,7 @@ var G = require('../boot.js');
         var e = near[i];
         if (e.dead) continue;
         if (U.dist2(x, y, e.x, e.y) <= (r + e.r) * (r + e.r)) {
-          game.damageEnemy(e, dmg, x, y, false);
+          game.damageEnemy(e, dmg, x, y, false, { aoe: true });
           hit = true;
         }
       }
@@ -107,7 +107,7 @@ var G = require('../boot.js');
         var e2 = near[i];
         if (e2.dead) continue;
         if (U.dist2(x, y, e2.x, e2.y) <= (r + e2.r) * (r + e2.r)) {
-          game.damageEnemy(e2, dmg, x, y, true);
+          game.damageEnemy(e2, dmg, x, y, true, { aoe: true });
           WeaponFX.applyBurn(e2, ws, atk);
         }
       }
@@ -260,7 +260,7 @@ var G = require('../boot.js');
               var e2 = near[i];
               if (e2.dead) continue;
               if (U.dist2(f.x, f.y, e2.x, e2.y) <= (f.r + e2.r) * (f.r + e2.r)) {
-                game.damageEnemy(e2, f.dmg, f.x, f.y, false);
+                game.damageEnemy(e2, f.dmg, f.x, f.y, false, { aoe: true });
                 WeaponFX.applyBurn(e2, f.ws, f.atk);
               }
             }

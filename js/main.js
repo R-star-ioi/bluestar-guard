@@ -77,6 +77,7 @@ var G = require('./boot.js');
       Game.currentLevel = level;
       G.Meta.selectedLevel = level;
       G.Meta.save();
+      if (G.Devourer) G.Devourer.reset();   // 停掉上一局的吞噬者与 BGM
       Game.gold = D2.ECONOMY.START_GOLD;
       Game.level = 1; Game.xp = 0; Game.xpNext = 5;
       Game.kills = 0; Game.playTime = 0;
@@ -346,12 +347,17 @@ var G = require('./boot.js');
       return best;
     },
 
-    damageEnemy: function (e, dmg, hx, hy, big) {
+    damageEnemy: function (e, dmg, hx, hy, big, opts) {
       // 暴击：局内技能 + 武器暴击率；倍率含武器暴击伤害
       var crit = Math.random() < G.Player.critRate();
       if (crit) dmg *= G.Player.critMult();
       // 灼烧易伤（红色 3★+：被点燃的目标受到的所有伤害 +15%）
       if (G.WeaponFX) dmg *= G.WeaponFX.vulnMult(e);
+      // 世界吞噬者：全伤害 -20%；爆炸/范围类再 -80%
+      if (e.isWorm && G.Devourer) {
+        dmg *= (1 - D.DEVOURER.RESIST);
+        if (opts && opts.aoe) dmg *= (1 - D.DEVOURER.AOE_RESIST);
+      }
       G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
       var leech = G.Player.stats.leech * 0.02;
@@ -363,6 +369,7 @@ var G = require('./boot.js');
     onKill: function (e) {
       Game.kills++;
       G.Skills.onKill(e, Game);
+      if (e.isWorm && G.Devourer) { G.Devourer.onSegDead(e); return; }   // 体节死亡 → 蠕虫分裂
       if (G.WeaponFX) G.WeaponFX.onKill(e, Game);   // 回血 / 灼烧传染 / 箭雨蓄能
       if (e.boss) {
         Game.showMsg('BOSS 击败！', '#ffd700', 2);
@@ -423,6 +430,7 @@ var G = require('./boot.js');
         G.P.storage.set('lx_best', Game.best);
       }
       G.Meta.save(); // 结算存档升级金币
+      if (G.Devourer) G.Devourer.reset();   // 停 BGM 与蠕虫
       G.Audio.play('gameover');
       Game.setState('gameover');
     },
@@ -592,6 +600,7 @@ var G = require('./boot.js');
       G.Hero.update(dt, Game);
       G.Proj.update(dt, Game);
       if (G.WeaponFX) G.WeaponFX.update(dt, Game);
+      if (G.Devourer) G.Devourer.update(dt, Game);
       G.Pickup.update(dt, Game);
       G.Skills.update(dt, Game);
       G.FX.update(dt);
@@ -633,6 +642,7 @@ var G = require('./boot.js');
       G.Pickup.draw(ctx, ox, oy);
       G.Hero.draw(ctx, ox, oy);
       G.Enemy.draw(ctx, ox, oy);
+      if (G.Devourer) G.Devourer.draw(ctx, ox, oy);
       G.Player.draw(ctx, ox, oy);
       G.Skills.draw(ctx, ox, oy);
       if (G.WeaponFX) G.WeaponFX.draw(ctx, ox, oy);

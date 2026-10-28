@@ -210,5 +210,36 @@ var G = require('../boot.js');
     setTimeout(function () { try { inp.focus(); } catch (e) { } }, 30);
   };
 
+  // ---- 背景音乐（真实音频文件；与 audio.js 的合成音效互不影响）----
+  var bgm = null;
+  P.playBgm = function (src, vol) {
+    P.stopBgm();
+    try {
+      if (P.isWx) {
+        bgm = wx.createInnerAudioContext();
+        bgm.src = src;
+        bgm.loop = true;
+        bgm.volume = vol || 0.6;
+        bgm.play();
+      } else if (typeof Audio !== 'undefined') {
+        bgm = new Audio(encodeURI(src));
+        bgm.loop = true;
+        bgm.volume = vol || 0.6;
+        var pr = bgm.play();
+        if (pr && pr.catch) pr.catch(function () { });   // 自动播放策略：失败则等下一次交互
+      }
+    } catch (e) { bgm = null; }
+  };
+  P.stopBgm = function () {
+    if (!bgm) return;
+    try {
+      if (bgm.pause) bgm.pause();
+      if (bgm.destroy) bgm.destroy();
+      if (bgm.src && bgm.removeAttribute) bgm.removeAttribute('src');
+    } catch (e) { }
+    bgm = null;
+  };
+  P.bgmAlive = function () { return !!bgm; };
+
   G.P = P;
 })();

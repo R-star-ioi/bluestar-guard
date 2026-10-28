@@ -246,6 +246,37 @@ var G = require('../boot.js');
     setTimeout(function () { try { inp.focus(); } catch (e) { } }, 30);
   };
 
+  // ---- 背景音乐（真实音频文件；与 audio.js 的合成音效互不影响）----
+  var bgm = null;
+  P.playBgm = function (src, vol) {
+    P.stopBgm();
+    try {
+      if (P.isWx) {
+        bgm = wx.createInnerAudioContext();
+        bgm.src = src;
+        bgm.loop = true;
+        bgm.volume = vol || 0.6;
+        bgm.play();
+      } else if (typeof Audio !== 'undefined') {
+        bgm = new Audio(encodeURI(src));
+        bgm.loop = true;
+        bgm.volume = vol || 0.6;
+        var pr = bgm.play();
+        if (pr && pr.catch) pr.catch(function () { });   // 自动播放策略：失败则等下一次交互
+      }
+    } catch (e) { bgm = null; }
+  };
+  P.stopBgm = function () {
+    if (!bgm) return;
+    try {
+      if (bgm.pause) bgm.pause();
+      if (bgm.destroy) bgm.destroy();
+      if (bgm.src && bgm.removeAttribute) bgm.removeAttribute('src');
+    } catch (e) { }
+    bgm = null;
+  };
+  P.bgmAlive = function () { return !!bgm; };
+
   G.P = P;
 })();
 
@@ -560,6 +591,30 @@ var G = require('../boot.js');
     COIN: 80, GEM: 40, SUMMON_INTERVAL: 6, SUMMON_N: 4
   };
 
+  // ★ 世界吞噬者（每关第 20 波关底蠕虫 Boss，v0.5.15）
+  D.DEVOURER = {
+    SEG_COUNT: 72,         // 体节数
+    SPEED_RATIO: 0.85,     // 速度 = 玩家速度 × 0.85
+    DASH_DMG: 55,          // 冲撞
+    SPIT_DMG: 15,          // 魔唾液命中
+    POOL_DMG: 10,          // 魔唾液落地的酸液
+    TOUCH_DMG: 5,          // 碰到身体
+    RESIST: 0.20,          // 全伤害减免 20%
+    AOE_RESIST: 0.80,      // 爆炸/范围类伤害额外减免 80%
+    DASH_CD: 6,            // 冲撞冷却
+    SPIT_SPEED: 175,
+    // 基础总血量：L1 50万 / L2 500万 / L3 5000万 / L4 5500万，L5 起每关 ×1.5
+    HP_BASE: [500000, 5000000, 50000000, 55000000],
+    HP_GROW: 1.5,
+    hpOf: function (lv) {
+      var t = D.DEVOURER.HP_BASE;
+      if (lv <= t.length) return t[lv - 1];
+      return t[t.length - 1] * Math.pow(D.DEVOURER.HP_GROW, lv - t.length);
+    },
+    BGM: 'Music/世界吞噬者.mp3',
+    BGM_VOL: 0.6
+  };
+
   // 掉落
   D.DROPS = {
     COIN_VALUE: 1,
@@ -703,6 +758,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.15', title: '世界吞噬者', lines: ['第 20 波关底 Boss 换成蠕虫「世界吞噬者」：72 体节，打碎一节就分裂成多条', '它存活期间循环播放专属 BGM（60% 音量）', '会冲撞与喷吐魔唾液，命中会禁疗 / 减速 / 易伤', '受到的所有伤害 -20%，爆炸类再 -80%，请别指望炎爆速刷'] },
     { ver: 'v0.5.14', title: '怪物血量重做', lines: ['小怪基础 500 / 精英 3500 / Boss 15000，不再一箭秒', '精英与 Boss 血量改为固定基线，不再随你的装备浮动', '波内与关间成长重新标定，后期压迫感更强'] },
     { ver: 'v0.5.13', title: 'HUD 调整', lines: ['波次倒计时移到屏幕上方，字号放大一倍，不再挡住左上战绩', '波次间隔改为 5 秒', '左上角新增当前主角 DPS 秒伤'] },
     { ver: 'v0.5.12', title: '武器战斗效果', lines: ['五档品质各有独立效果：穿透、冰霜冻结、暗影分裂、炎爆灼烧', '红色按星级进阶：2★灼烧强化 3★火焰轨迹 4★双重炎爆+图腾 5★焚天箭雨', '武器属性改为真实加成（攻击/攻速/暴击率/暴击伤害/射程）'] },
@@ -747,7 +803,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.14';
+  D.VERSION = 'v0.5.15';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -1325,7 +1381,7 @@ var G = require('../boot.js');
         var e = near[i];
         if (e.dead) continue;
         if (U.dist2(x, y, e.x, e.y) <= (r + e.r) * (r + e.r)) {
-          game.damageEnemy(e, dmg, x, y, false);
+          game.damageEnemy(e, dmg, x, y, false, { aoe: true });
           hit = true;
         }
       }
@@ -1367,7 +1423,7 @@ var G = require('../boot.js');
         var e2 = near[i];
         if (e2.dead) continue;
         if (U.dist2(x, y, e2.x, e2.y) <= (r + e2.r) * (r + e2.r)) {
-          game.damageEnemy(e2, dmg, x, y, true);
+          game.damageEnemy(e2, dmg, x, y, true, { aoe: true });
           WeaponFX.applyBurn(e2, ws, atk);
         }
       }
@@ -1520,7 +1576,7 @@ var G = require('../boot.js');
               var e2 = near[i];
               if (e2.dead) continue;
               if (U.dist2(f.x, f.y, e2.x, e2.y) <= (f.r + e2.r) * (f.r + e2.r)) {
-                game.damageEnemy(e2, f.dmg, f.x, f.y, false);
+                game.damageEnemy(e2, f.dmg, f.x, f.y, false, { aoe: true });
                 WeaponFX.applyBurn(e2, f.ws, f.atk);
               }
             }
@@ -2134,7 +2190,7 @@ var G = require('../boot.js');
         var d = Math.sqrt(U.dist2(p.x, p.y, e.x, e.y));
         if (d <= p.splash + e.r) {
           var k = 1 - Math.min(1, d / (p.splash + e.r)) * 0.5;
-          game.damageEnemy(e, p.dmg * k, e.x, e.y, true);
+          game.damageEnemy(e, p.dmg * k, e.x, e.y, true, { aoe: true });
         }
       }
     },
@@ -2242,6 +2298,7 @@ var G = require('../boot.js');
       Player.dead = false;
       Player.attackTimer = 0;
       Player.face = 1;
+      Player.noHealT = 0; Player.slowDebuffT = 0; Player.vulnT = 0;   // 吞噬者减益
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
       Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
       // 武器战斗状态（灼烧/场效果/箭雨蓄能）
@@ -2260,7 +2317,7 @@ var G = require('../boot.js');
       return a;
     },
     interval: function () { return Player.proto.interval * Math.pow(0.92, Player.stats.aspeed) * (G.Skills ? G.Skills.aspdMult() : 1); },
-    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
+    speed: function () { return Player.proto.speed * (1 + Player.stats.speed * 0.1) * (Player.slowDebuffT > 0 ? 0.9 : 1) + (G.Skills ? Player.proto.speed * G.Skills.speedBonus() : 0); },
     // 暴击率：局内技能（每点 8%）+ 武器暴击率
     critRate: function () {
       var ws = Player.proto.weapon;
@@ -2284,6 +2341,10 @@ var G = require('../boot.js');
 
     update: function (dt, game) {
       if (Player.dead) return;
+      // 吞噬者减益倒计时（互相独立）
+      if (Player.noHealT > 0) Player.noHealT -= dt;
+      if (Player.slowDebuffT > 0) Player.slowDebuffT -= dt;
+      if (Player.vulnT > 0) Player.vulnT -= dt;
       // 移动（摇杆）
       var j = G.Input.joystick;
       var vx = 0, vy = 0;
@@ -2404,6 +2465,7 @@ var G = require('../boot.js');
         dmg = G.Skills.absorbDamage(dmg, game);
         if (dmg <= 0.01) return;
       }
+      if (Player.vulnT > 0) dmg *= 1.2;   // 吞噬者减益：受到的伤害更疼
       Player.hp -= dmg;
       G.FX.text(Player.x, Player.y - 22, '-' + Math.round(dmg), '#ff6b6b', 13);
       G.FX.burst(Player.x, Player.y, 4, '#ff5252', 100, 0.35, 3);
@@ -2417,11 +2479,23 @@ var G = require('../boot.js');
 
     heal: function (v) {
       if (Player.dead) return;
+      // 吞噬者减益：无法治疗
+      if (Player.noHealT > 0) {
+        G.FX.text(Player.x, Player.y - 26, '无法治疗', '#ff6b6b', 11);
+        return;
+      }
       var real = Math.min(Player.maxHp - Player.hp, v);
       if (real > 0.5) {
         G.FX.text(Player.x, Player.y - 24, '+' + Math.round(real), '#7bed9f', 12);
       }
       Player.hp = Math.min(Player.maxHp, Player.hp + v);
+    },
+
+    // 世界吞噬者的攻击命中后施加三个独立减益
+    applyWormDebuff: function () {
+      Player.noHealT = 10;        // 无法治疗 10s
+      Player.slowDebuffT = 5;     // 移速 -10% 5s
+      Player.vulnT = 5;           // 受到的伤害 +20% 5s
     },
 
     draw: function (ctx, ox, oy) {
@@ -3079,6 +3153,7 @@ var G = require('../boot.js');
       for (i = list.length - 1; i >= 0; i--) {
         e = list[i];
         if (e.dead) { list.splice(i, 1); continue; }
+        if (e.isWorm) { Enemy.updateWormNode(e, dt, game); continue; }   // 蠕虫体节由 Devourer 驱动
         if (e.hitT > 0) e.hitT -= dt;
         e.wobT += dt;
         if (e.orbT > 0) e.orbT -= dt;
@@ -3218,6 +3293,38 @@ var G = require('../boot.js');
       }
     },
 
+    // 蠕虫体节：移动/攻击由 Devourer 驱动，这里只结算受击闪、灼烧与击退
+    updateWormNode: function (e, dt, game) {
+      if (e.hitT > 0) e.hitT -= dt;
+      if (e.slowT > 0) e.slowT -= dt;
+      if (e.freezeT > 0) e.freezeT -= dt;
+      if (e.chillT > 0) e.chillT -= dt;
+      if (e.kbX || e.kbY) {
+        e.x += e.kbX * dt; e.y += e.kbY * dt;
+        var kd = Math.pow(0.01, dt);
+        e.kbX *= kd; e.kbY *= kd;
+        if (Math.abs(e.kbX) < 2) e.kbX = 0;
+        if (Math.abs(e.kbY) < 2) e.kbY = 0;
+      }
+      if (e.burnT > 0) {
+        e.burnT -= dt;
+        var bd = (e.burnN || 0) * (e.burnDps || 0) * dt;
+        // 灼烧算火系持续伤害：吃吞噬者的 20% 减伤 + 对爆炸物 80% 减伤
+        if (e.isWorm) bd *= (1 - D.DEVOURER.RESIST) * (1 - D.DEVOURER.AOE_RESIST);
+        if (bd > 0) e.hp -= bd;
+        e.burnFx = (e.burnFx || 0) + dt;
+        if (e.burnFx > 0.5) {
+          e.burnFx = 0;
+          var tickDmg = (e.burnN || 0) * (e.burnDps || 0) * 0.5;
+          if (tickDmg >= 1) G.FX.text(e.x + U.rand(-7, 7), e.y - e.r - 3, String(Math.round(tickDmg)), '#ff9f43', 10);
+        }
+        if (e.hp <= 0) {
+          e.hp = 0;
+          Enemy.damage(game, e, 0, e.x, e.y, false, false, true);
+        }
+      }
+    },
+
     damage: function (game, e, dmg, hx, hy, big, crit, silent) {
       if (e.dead) return;
       // 暴击判定在调用方处理，这里直接扣血
@@ -3244,6 +3351,7 @@ var G = require('../boot.js');
       var t = Date.now() / 1000;
       for (var i = 0; i < Enemy.list.length; i++) {
         var e = Enemy.list[i];
+        if (e.isWorm) continue;   // 蠕虫由 Devourer.draw 绘制
         var sx = e.x - ox, sy = e.y - oy;
         if (sx < -60 || sy < -60 || sx > G.P.screenW + 60 || sy > G.P.screenH + 60) continue;
         var wob = Math.sin(e.wobT * 6) * 0.08;
@@ -3357,6 +3465,470 @@ var G = require('../boot.js');
     }
   };
   G.Enemy = Enemy;
+})();
+
+});
+__def("js/entities/devourer.js", function (module, exports, require) {
+// 世界吞噬者：第 20 波关底 Boss。多体节蠕虫，击杀任意体节即分裂，
+// 击败所有独立蠕虫才算击杀。活着时循环播放专属 BGM（60% 音量）。
+var G = require('../boot.js');
+(function () {
+  var U = G.U, D = G.D;
+
+  var Devourer = {
+    worms: [],      // { segs:[node], spacing, level, dashCd, dashT, dashing, dashDir, dashHit, spitT }
+    spits: [],      // 魔唾液弹 { x,y,vx,vy,r,t,life }
+    pools: [],      // 唾液落地的酸液 { x,y,r,t,life,tick }
+    touchCd: 0,
+    active: false,
+    level: 1,
+
+    reset: function () {
+      Devourer.worms.length = 0;
+      Devourer.spits.length = 0;
+      Devourer.pools.length = 0;
+      Devourer.active = false;
+      Devourer.touchCd = 0;
+      if (G.P.stopBgm) G.P.stopBgm();
+    },
+
+    hpOf: function (lv) { return D.DEVOURER.hpOf(lv); },
+
+    // ============ 生成 ============
+    spawn: function (game, level) {
+      Devourer.reset();
+      Devourer.active = true;
+      Devourer.level = level;
+
+      var n = D.DEVOURER.SEG_COUNT;
+      var total = D.DEVOURER.hpOf(level);
+      var unit = total / (n - 1 + 2.5);          // 头按 2.5 节计
+      var spacing = 19;
+      var pl = G.Player;
+      var a = Math.random() * Math.PI * 2;
+      var hx = U.clamp(pl.x + Math.cos(a) * 620, 80, D.MAP_W - 80);
+      var hy = U.clamp(pl.y + Math.sin(a) * 620, 80, D.MAP_H - 80);
+
+      var segs = [];
+      for (var i = 0; i < n; i++) {
+        var hp = unit * (i === 0 ? 2.5 : 1);
+        var r = i === 0 ? 21 : (i === n - 1 ? 11 : 14);
+        var e = {
+          isWorm: true,
+          type: 'worm', x: hx - Math.cos(a) * i * spacing, y: hy - Math.sin(a) * i * spacing,
+          hp: hp, maxHp: hp,
+          r: r, speed: 0, dmg: 0,
+          color: '#c9a3c9', wave: D.LEVELS.WAVES, level: level,
+          dead: false, hitT: 0,
+          elite: false, boss: false,
+          coin: 12, gem: 2,
+          atkT: 0, shootT: 0, vx: 0, vy: 0, wobT: Math.random() * 10,
+          stunT: 0, slowT: 0, orbT: 0, kbX: 0, kbY: 0,
+          freezeT: 0, chillT: 0, chillSlow: 0.4, chillAspd: 0.2,
+          burnT: 0, burnN: 0, burnDps: 0, burnFx: 0
+        };
+        G.Enemy.list.push(e);
+        segs.push(e);
+      }
+      Devourer.worms.push(Devourer.makeWorm(segs, level, spacing));
+      if (G.P.playBgm) G.P.playBgm('Music/世界吞噬者.mp3', 0.6);
+    },
+
+    makeWorm: function (segs, level, spacing) {
+      return {
+        segs: segs, level: level, spacing: spacing,
+        dashCd: U.rand(4, 7), dashT: 0, dashing: 0, dashDir: null, dashHit: false,
+        spitT: U.rand(1.2, 2.6)
+      };
+    },
+
+    // ============ 体节被击杀 → 分裂 ============
+    onSegDead: function (e) {
+      for (var wi = Devourer.worms.length - 1; wi >= 0; wi--) {
+        var w = Devourer.worms[wi];
+        var idx = w.segs.indexOf(e);
+        if (idx < 0) continue;
+        var segs = w.segs.slice();
+        segs.splice(idx, 1);
+        Devourer.worms.splice(wi, 1);
+        // 断成两截，每截都是一条独立蠕虫（各自有头有尾；单节也算一只）
+        var before = segs.slice(0, idx);
+        var after = segs.slice(idx);
+        G.FX.burst(e.x, e.y, 10, '#8a5f8a', 150, 0.5, 4);
+        if (before.length) Devourer.worms.push(Devourer.makeWorm(before, w.level, w.spacing));
+        if (after.length) Devourer.worms.push(Devourer.makeWorm(after, w.level, w.spacing));
+        var alive = 0;
+        for (var k = 0; k < Devourer.worms.length; k++) alive += Devourer.worms[k].segs.length;
+        if (alive === 0) Devourer.onDefeated(w.level);
+        return;
+      }
+    },
+
+    onDefeated: function (level) {
+      Devourer.active = false;
+      if (G.P.stopBgm) G.P.stopBgm();
+      G.Audio.play('boss');
+      G.Camera.shake(10, 0.8);
+      var pl = G.Player;
+      G.FX.text(pl.x, pl.y - 46, '世界吞噬者 已被击败！', '#ffd700', 20);
+      var game = G.game;
+      if (game) {
+        var bonus = 300 + 150 * level;
+        game.gold += bonus;
+        game.showMsg('击杀奖励 +' + bonus + ' 金币', '#ffd700', 2.2);
+      }
+    },
+
+    // ============ 每帧 ============
+    update: function (dt, game) {
+      if (!Devourer.active) {
+        Devourer.updateFx(dt, game);
+        return;
+      }
+      var pl = G.Player, b = game.base;
+      var baseSpeed = pl.speed() * D.DEVOURER.SPEED_RATIO;
+
+      for (var wi = Devourer.worms.length - 1; wi >= 0; wi--) {
+        var w = Devourer.worms[wi];
+        if (!w.segs.length) { Devourer.worms.splice(wi, 1); continue; }
+        var head = w.segs[0];
+
+        // 目标：优先玩家，其次基地
+        var tx, ty, targetPlayer = false;
+        if (!pl.dead && U.dist2(head.x, head.y, pl.x, pl.y) < 900 * 900) {
+          tx = pl.x; ty = pl.y; targetPlayer = true;
+        } else if (b && b.hp > 0) { tx = b.x; ty = b.y; }
+        else { tx = pl.x; ty = pl.y; }
+
+        // ---- 冲撞状态机 ----
+        w.dashCd -= dt;
+        if (w.dashCd <= 0 && !w.dashT && !w.dashing && targetPlayer && w.segs.length >= 3) {
+          w.dashT = 0.85;                      // 蓄力（可走位躲避）
+          w.dashAim = { x: pl.x, y: pl.y };
+          G.FX.text(head.x, head.y - head.r - 18, '!', '#ff6b6b', 20);
+        }
+        var spd = baseSpeed;
+
+        if (w.dashT > 0) {
+          w.dashT -= dt;
+          spd = baseSpeed * 0.25;
+          if (w.dashT <= 0) {
+            var da = U.angle(head.x, head.y, w.dashAim.x, w.dashAim.y);
+            w.dashDir = { x: Math.cos(da), y: Math.sin(da) };
+            w.dashing = 1.15;
+            w.dashHit = false;
+            G.Audio.play('boss');
+            G.Camera.shake(4, 0.25);
+          }
+        }
+
+        if (w.dashing > 0) {
+          w.dashing -= dt;
+          spd = baseSpeed * 2.6;
+          head.x += w.dashDir.x * spd * dt;
+          head.y += w.dashDir.y * spd * dt;
+          head.x = U.clamp(head.x, 10, D.MAP_W - 10);
+          head.y = U.clamp(head.y, 10, D.MAP_H - 10);
+          if (!w.dashHit && !pl.dead &&
+              U.dist2(head.x, head.y, pl.x, pl.y) < (head.r + pl.r + 4) * (head.r + pl.r + 4)) {
+            w.dashHit = true;
+            pl.damage(D.DEVOURER.DASH_DMG, game);
+            pl.applyWormDebuff();
+            G.Camera.shake(7, 0.3);
+            w.dashing = 0;
+            w.dashCd = D.DEVOURER.DASH_CD;
+          }
+          if (w.dashing <= 0) w.dashCd = D.DEVOURER.DASH_CD;
+          Devourer.followBody(w);
+          continue;                            // 冲撞期间不射击
+        }
+
+        // ---- 普通移动（蛇形摆动）----
+        var ang = U.angle(head.x, head.y, tx, ty) + Math.sin(Date.now() / 450 + wi * 1.7) * 0.55;
+        head.x = U.clamp(head.x + Math.cos(ang) * spd * dt, 10, D.MAP_W - 10);
+        head.y = U.clamp(head.y + Math.sin(ang) * spd * dt, 10, D.MAP_H - 10);
+        Devourer.followBody(w);
+
+        // ---- 魔唾液 ----
+        w.spitT -= dt;
+        if (w.spitT <= 0) {
+          var headK = head.hp / head.maxHp;
+          w.spitT = (headK < 0.4 ? 1.1 : 2.4) * U.rand(0.85, 1.2);   // 头血低 → 射更频繁
+          var seg;
+          if (w.segs.length === 1 || Math.random() < 0.4) seg = head;
+          else seg = w.segs[1 + Math.floor(Math.random() * (w.segs.length - 1))];
+          var sa = U.angle(seg.x, seg.y, pl.x, pl.y) + U.rand(-0.16, 0.16);
+          Devourer.spits.push({
+            x: seg.x, y: seg.y,
+            vx: Math.cos(sa) * 175, vy: Math.sin(sa) * 175,
+            r: 7, t: 0, life: 3.2
+          });
+          G.Audio.play('shoot');
+        }
+      }
+
+      Devourer.updateFx(dt, game);
+      Devourer.touchDamage(dt, game);
+    },
+
+    // 身体逐节跟随前一节，保持固定间距（经典蠕虫跟随）
+    followBody: function (w) {
+      for (var i = 1; i < w.segs.length; i++) {
+        var prev = w.segs[i - 1], cur = w.segs[i];
+        var dx = prev.x - cur.x, dy = prev.y - cur.y;
+        var d = Math.sqrt(dx * dx + dy * dy) || 1;
+        if (d > w.spacing) {
+          var k = (d - w.spacing) / d;
+          cur.x += dx * k;
+          cur.y += dy * k;
+        }
+      }
+    },
+
+    // 唾液弹 / 酸液池 / 玩家弹丸拦截唾液
+    updateFx: function (dt, game) {
+      var pl = G.Player, i, j;
+      for (i = Devourer.spits.length - 1; i >= 0; i--) {
+        var s = Devourer.spits[i];
+        s.t += dt;
+        s.x += s.vx * dt; s.y += s.vy * dt;
+        var dead = s.t >= s.life;
+        if (!dead) {
+          var projs = G.Proj.list;
+          for (j = 0; j < projs.length; j++) {
+            var pj = projs[j];
+            if (!pj.friendly) continue;
+            if (U.dist2(pj.x, pj.y, s.x, s.y) < (pj.size + s.r) * (pj.size + s.r)) {
+              dead = true;
+              G.FX.burst(s.x, s.y, 5, '#b6e34a', 90, 0.3, 3);
+              break;
+            }
+          }
+        }
+        if (!dead && !pl.dead && U.dist2(pl.x, pl.y, s.x, s.y) < (pl.r + s.r) * (pl.r + s.r)) {
+          pl.damage(D.DEVOURER.SPIT_DMG, game);
+          pl.applyWormDebuff();
+          dead = true;
+        }
+        if (dead) {
+          Devourer.pools.push({ x: s.x, y: s.y, r: 20, t: 2.4, life: 2.4, tick: 0 });
+          Devourer.spits.splice(i, 1);
+        }
+      }
+      for (var k = Devourer.pools.length - 1; k >= 0; k--) {
+        var p = Devourer.pools[k];
+        p.t -= dt; p.tick += dt;
+        if (!pl.dead && p.tick >= 0.6 &&
+            U.dist2(pl.x, pl.y, p.x, p.y) < (pl.r + p.r) * (pl.r + p.r)) {
+          p.tick = 0;
+          pl.damage(D.DEVOURER.POOL_DMG, game);
+        }
+        if (p.t <= 0) Devourer.pools.splice(k, 1);
+      }
+    },
+
+    // 碰到身体：5 伤（不触发减益）
+    touchDamage: function (dt, game) {
+      Devourer.touchCd -= dt;
+      if (Devourer.touchCd > 0) return;
+      var pl = G.Player;
+      if (pl.dead) return;
+      for (var wi = 0; wi < Devourer.worms.length; wi++) {
+        var segs = Devourer.worms[wi].segs;
+        for (var i = 0; i < segs.length; i++) {
+          var s = segs[i];
+          if (U.dist2(s.x, s.y, pl.x, pl.y) < (s.r + pl.r) * (s.r + pl.r)) {
+            pl.damage(D.DEVOURER.TOUCH_DMG, game);
+            Devourer.touchCd = 0.5;
+            return;
+          }
+        }
+      }
+    },
+
+    // 当前总血量（HUD 血条用）
+    hpInfo: function () {
+      var cur = 0, max = 0, worms = 0;
+      for (var i = 0; i < Devourer.worms.length; i++) {
+        var segs = Devourer.worms[i].segs;
+        worms++;
+        for (var j = 0; j < segs.length; j++) {
+          cur += segs[j].hp;
+          max += segs[j].maxHp;
+        }
+      }
+      return { cur: cur, max: max, worms: worms };
+    },
+
+    // ============ 绘制 ============
+    draw: function (ctx, ox, oy) {
+      var t = Date.now() / 1000;
+      var fa = (G.FX && G.FX.alpha) ? G.FX.alpha() : 1;
+      var i, wi;
+
+      // 酸液池（画在最底层）
+      for (i = 0; i < Devourer.pools.length; i++) {
+        var p = Devourer.pools[i];
+        var a = Math.max(0, p.t / p.life);
+        ctx.globalAlpha = (0.4 + 0.2 * Math.sin(t * 5)) * a * fa;
+        ctx.fillStyle = '#7fae3f';
+        ctx.beginPath();
+        ctx.ellipse(p.x - ox, p.y - oy, p.r, p.r * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // 体节（从尾到头，头压在最上面）
+      for (wi = 0; wi < Devourer.worms.length; wi++) {
+        var segs = Devourer.worms[wi].segs;
+        for (i = segs.length - 1; i >= 0; i--) {
+          var s = segs[i];
+          var sx = s.x - ox, sy = s.y - oy;
+          if (sx < -50 || sy < -50 || sx > G.P.screenW + 50 || sy > G.P.screenH + 50) continue;
+          var isHead = i === 0;
+          var isTail = i === segs.length - 1;
+          var flash = s.hitT > 0;
+          var r = s.r * (1 + Math.sin(t * 6 + i * 0.55) * 0.05);   // 蠕动起伏
+
+          // 影子
+          ctx.fillStyle = 'rgba(0,0,0,0.28)';
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.r * 0.8, r * 0.9, r * 0.38, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 身体
+          ctx.fillStyle = flash ? '#ffffff' : '#c9a3c9';
+          ctx.strokeStyle = '#7d5678';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+          // 背脊暗纹（上缘一道深色，立体感）
+          ctx.strokeStyle = 'rgba(93,55,90,0.5)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(sx, sy, r * 0.62, Math.PI * 1.15, Math.PI * 1.85);
+          ctx.stroke();
+
+          // 绿斑（每节固定 2 个，位置随索引变化，对齐参考图）
+          if (!isHead && !isTail) {
+            ctx.fillStyle = flash ? '#dfe9c8' : '#b9d24b';
+            var o1 = (i * 37) % 10 / 10, o2 = (i * 61) % 10 / 10;
+            ctx.beginPath();
+            ctx.ellipse(sx + (o1 - 0.5) * r, sy + (o2 - 0.4) * r * 0.8, r * 0.16, r * 0.11, o1 * 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(sx + (o2 - 0.5) * r * 0.8, sy + (o1 - 0.5) * r * 0.7, r * 0.12, r * 0.09, o2 * 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          if (isHead) Devourer.drawHead(ctx, sx, sy, segs, r, flash, t, fa, ox, oy);
+          if (isTail && segs.length > 1) {
+            // 尾尖
+            var pv = segs[i - 1];
+            var ta = Math.atan2(sy - (pv.y - oy), sx - (pv.x - ox));
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(ta);
+            ctx.fillStyle = flash ? '#fff' : '#8a5f8a';
+            ctx.beginPath();
+            ctx.moveTo(r * 1.35, 0);
+            ctx.lineTo(0, -r * 0.55);
+            ctx.lineTo(0, r * 0.55);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // 冻结 / 寒霜（冰武器效果）
+          if (s.freezeT > 0) {
+            ctx.strokeStyle = 'rgba(170,235,255,0.9)';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(sx, sy, r + 3, 0, Math.PI * 2); ctx.stroke();
+          }
+        }
+      }
+
+      // 魔唾液弹
+      for (i = 0; i < Devourer.spits.length; i++) {
+        var sp = Devourer.spits[i];
+        var px = sp.x - ox, py = sp.y - oy;
+        ctx.globalAlpha = 0.5 * fa;
+        ctx.strokeStyle = '#b6e34a';
+        ctx.lineWidth = sp.r * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(px - sp.vx * 0.05, py - sp.vy * 0.05);
+        ctx.lineTo(px, py);
+        ctx.stroke();
+        ctx.globalAlpha = fa;
+        ctx.fillStyle = '#9dc93c';
+        ctx.beginPath();
+        ctx.arc(px, py, sp.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#d7ef8a';
+        ctx.beginPath();
+        ctx.arc(px - sp.r * 0.25, py - sp.r * 0.25, sp.r * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    },
+
+    // 头部：大眼 + 獠牙 + 角（朝向 = 远离第二节的行进方向）
+    drawHead: function (ctx, sx, sy, segs, r, flash, t, fa, ox, oy) {
+      var neck = segs.length > 1 ? segs[1] : null;
+      var ang = neck ? Math.atan2(sy + oy - neck.y, sx + ox - neck.x) : 0;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(ang);
+      var body = flash ? '#ffffff' : '#c9a3c9';
+      var dark = flash ? '#dddddd' : '#4a2b47';
+      var gold = flash ? '#ffeeaa' : '#d4b106';
+      // 角（头顶两根，向后弯）
+      ctx.fillStyle = gold;
+      for (var sgn = -1; sgn <= 1; sgn += 2) {
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.15, sgn * r * 0.55);
+        ctx.quadraticCurveTo(-r * 0.9, sgn * r * 1.05, -r * 1.25, sgn * r * 0.7);
+        ctx.quadraticCurveTo(-r * 0.7, sgn * r * 0.72, -r * 0.3, sgn * r * 0.35);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // 嘴（前端张开的一道深色裂口）
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.ellipse(r * 0.62, 0, r * 0.34, r * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 獠牙（上下各两颗）
+      ctx.fillStyle = gold;
+      for (var k = 0; k < 2; k++) {
+        for (var sgn2 = -1; sgn2 <= 1; sgn2 += 2) {
+          var fx = r * (0.55 + k * 0.3);
+          ctx.beginPath();
+          ctx.moveTo(fx, sgn2 * r * 0.28);
+          ctx.lineTo(fx + r * 0.22, sgn2 * r * (0.42 + k * 0.16));
+          ctx.lineTo(fx + r * 0.34, sgn2 * r * 0.18);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      // 大眼（一只，位于前部）
+      ctx.fillStyle = '#f5f0e8';
+      ctx.beginPath();
+      ctx.arc(r * 0.1, 0, r * 0.34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1a1020';
+      ctx.beginPath();
+      ctx.arc(r * 0.2, 0, r * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(r * 0.26, -r * 0.08, r * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
+  G.Devourer = Devourer;
 })();
 
 });
@@ -3803,10 +4375,17 @@ var G = require('../boot.js');
       var boss = Waves.isBossWave(Waves.wave);
       game.onWaveStart(Waves.level, Waves.wave, boss);
       if (boss) {
-        var p = Waves.spawnPoint(game);
-        G.Enemy.spawn(game, 'slime', p.x, p.y, { level: Waves.level, wave: Waves.wave, boss: true });
+        if (Waves.wave === D.LEVELS.WAVES && G.Devourer) {
+          // 关底 Boss：世界吞噬者（多体节蠕虫）
+          G.Devourer.spawn(game, Waves.level);
+          game.showMsg('⚠ 世界吞噬者来袭', '#ff6b6b', 2.5);
+          G.Camera.shake(9, 0.8);
+        } else {
+          var p = Waves.spawnPoint(game);
+          G.Enemy.spawn(game, 'slime', p.x, p.y, { level: Waves.level, wave: Waves.wave, boss: true });
+          G.Camera.shake(6, 0.5);
+        }
         G.Audio.play('boss');
-        G.Camera.shake(6, 0.5);
       }
     },
 
@@ -3961,6 +4540,17 @@ var G = require('../boot.js');
       ctx.fillStyle = '#7ef9ff';
       ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
 
+      // 吞噬者减益（DPS 右侧顺排；纵向与 Boss 血条错开）
+      var deb = [];
+      if (pl.noHealT > 0) deb.push('禁疗 ' + Math.ceil(pl.noHealT) + 's');
+      if (pl.slowDebuffT > 0) deb.push('减速 ' + Math.ceil(pl.slowDebuffT) + 's');
+      if (pl.vulnT > 0) deb.push('易伤 ' + Math.ceil(pl.vulnT) + 's');
+      if (deb.length) {
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = '#ff8f8f';
+        ctx.fillText(deb.join('  '), 130, 70);
+      }
+
       // 关卡与波次（中）
       ctx.textAlign = 'center';
       ctx.font = 'bold 13px sans-serif';
@@ -3999,10 +4589,27 @@ var G = require('../boot.js');
         game.setState('paused');
       });
 
-      // Boss 血条
+      // Boss 血条（世界吞噬者优先显示）
+      var dv = (G.Devourer && G.Devourer.active) ? G.Devourer.hpInfo() : null;
       var boss = null;
-      for (var i = 0; i < G.Enemy.list.length; i++) if (G.Enemy.list[i].boss) { boss = G.Enemy.list[i]; break; }
-      if (boss) {
+      if (!dv) {
+        for (var i = 0; i < G.Enemy.list.length; i++) if (G.Enemy.list[i].boss) { boss = G.Enemy.list[i]; break; }
+      }
+      if (dv && dv.max > 0) {
+        var bw = Math.min(340, W - 90);
+        var bx = (W - bw) / 2, by = 74;
+        UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(30,4,34,0.78)', 10);
+        ctx.fillStyle = '#3a0f38';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); } else ctx.fillRect(bx, by, bw, 14);
+        ctx.fillStyle = '#b565c9';
+        var hk = Math.max(0, dv.cur / dv.max);
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * hk, 12, 6); ctx.fill(); }
+        else ctx.fillRect(bx + 1, by + 1, (bw - 2) * hk, 12);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText('世界吞噬者' + (dv.worms > 1 ? ' ×' + dv.worms : ''), W / 2, by + 11);
+      } else if (boss) {
         var bw = Math.min(320, W - 100);
         var bx = (W - bw) / 2, by = 74;
         UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(40,0,0,0.7)', 10);
@@ -5629,6 +6236,7 @@ var G = require('./boot.js');
       Game.currentLevel = level;
       G.Meta.selectedLevel = level;
       G.Meta.save();
+      if (G.Devourer) G.Devourer.reset();   // 停掉上一局的吞噬者与 BGM
       Game.gold = D2.ECONOMY.START_GOLD;
       Game.level = 1; Game.xp = 0; Game.xpNext = 5;
       Game.kills = 0; Game.playTime = 0;
@@ -5898,12 +6506,17 @@ var G = require('./boot.js');
       return best;
     },
 
-    damageEnemy: function (e, dmg, hx, hy, big) {
+    damageEnemy: function (e, dmg, hx, hy, big, opts) {
       // 暴击：局内技能 + 武器暴击率；倍率含武器暴击伤害
       var crit = Math.random() < G.Player.critRate();
       if (crit) dmg *= G.Player.critMult();
       // 灼烧易伤（红色 3★+：被点燃的目标受到的所有伤害 +15%）
       if (G.WeaponFX) dmg *= G.WeaponFX.vulnMult(e);
+      // 世界吞噬者：全伤害 -20%；爆炸/范围类再 -80%
+      if (e.isWorm && G.Devourer) {
+        dmg *= (1 - D.DEVOURER.RESIST);
+        if (opts && opts.aoe) dmg *= (1 - D.DEVOURER.AOE_RESIST);
+      }
       G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
       var leech = G.Player.stats.leech * 0.02;
@@ -5915,6 +6528,7 @@ var G = require('./boot.js');
     onKill: function (e) {
       Game.kills++;
       G.Skills.onKill(e, Game);
+      if (e.isWorm && G.Devourer) { G.Devourer.onSegDead(e); return; }   // 体节死亡 → 蠕虫分裂
       if (G.WeaponFX) G.WeaponFX.onKill(e, Game);   // 回血 / 灼烧传染 / 箭雨蓄能
       if (e.boss) {
         Game.showMsg('BOSS 击败！', '#ffd700', 2);
@@ -5975,6 +6589,7 @@ var G = require('./boot.js');
         G.P.storage.set('lx_best', Game.best);
       }
       G.Meta.save(); // 结算存档升级金币
+      if (G.Devourer) G.Devourer.reset();   // 停 BGM 与蠕虫
       G.Audio.play('gameover');
       Game.setState('gameover');
     },
@@ -6144,6 +6759,7 @@ var G = require('./boot.js');
       G.Hero.update(dt, Game);
       G.Proj.update(dt, Game);
       if (G.WeaponFX) G.WeaponFX.update(dt, Game);
+      if (G.Devourer) G.Devourer.update(dt, Game);
       G.Pickup.update(dt, Game);
       G.Skills.update(dt, Game);
       G.FX.update(dt);
@@ -6185,6 +6801,7 @@ var G = require('./boot.js');
       G.Pickup.draw(ctx, ox, oy);
       G.Hero.draw(ctx, ox, oy);
       G.Enemy.draw(ctx, ox, oy);
+      if (G.Devourer) G.Devourer.draw(ctx, ox, oy);
       G.Player.draw(ctx, ox, oy);
       G.Skills.draw(ctx, ox, oy);
       if (G.WeaponFX) G.WeaponFX.draw(ctx, ox, oy);
@@ -6254,6 +6871,7 @@ try {
   __req("", "./js/entities/player.js");
   __req("", "./js/entities/skills.js");
   __req("", "./js/entities/enemy.js");
+  __req("", "./js/entities/devourer.js");
   __req("", "./js/entities/hero.js");
   __req("", "./js/systems/waves.js");
   __req("", "./js/ui/ui.js");
