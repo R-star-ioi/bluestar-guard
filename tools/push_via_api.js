@@ -1,24 +1,24 @@
 // 网络故障备用通道：github.com:443 被重置、但 api.github.com 通时，用它把【本地已有的 commit】推上去。
 //
-// 做法：用 Git Data API 原样重建本地 commit —— tree / parents / message / author / committer
-//       全部照抄本地对象，所以 API 返回的 sha 与本地完全相同，直接 PATCH refs/heads/main。
-//       => 远端历史与本地一模一样，不会产生内容重复的第二条轨。
+// 做法：用 Git Data API 逐层重建本地对象 ——
+//   1) 用 `git diff-tree` 找出本 commit 相对父提交改动的文件，把这些 blob 按原始字节上传
+//   2) 以父提交的 tree 为 base_tree 建 tree，sha 与本地 tree 相同（内容寻址，确定性）
+//   3) 建 commit 时 tree / parents / message / author / committer 全部照抄本地对象
+//   => API 返回的 commit sha 与本地完全相同，直接 PATCH refs/heads/main。
+//      远端历史与本地一模一样，不会产生内容重复的第二条轨，下次 git push 也不会被拒。
 //
-// 旧实现（把工作区文件重新做成 blob + tree 再建 commit）会在远端产生新 sha，下次 git push
-// 必被拒绝，还得再 merge 一次；而且它上传的是 LF 换行的 blob，而本地是 CRLF，merge 时整文件
-// 冲突。该实现已废弃，别再改回去。
+// 旧实现（不管父提交，把工作区文件重新拼 tree）会在远端造出内容重复但 sha 不同的提交，
+// 并且上传的是 LF 换行 blob、本地是 CRLF，merge 时整文件冲突。那段代码已废弃，别改回去。
 //
 // 用法：GH_TOKEN=ghp_xxx node tools/push_via_api.js [tag] [tagMessage]
 //   兼容老用法：第一个参数若是 7~40 位十六进制 sha（旧版的“远端 commit”），自动忽略。
-// 前置：目标 commit 依赖的 tree 与 parent 必须已在远端。若 main 被拒但 tag 能推，先把 tag 推上去
-//       就能把对象传全：git push origin refs/tags/vX.Y.Z
+// 前置：父提交必须已在远端（远端 main 是本地祖先，或先把 tag 推上去）。
 var cp = require('child_process');
 var https = require('https');
 
 var TOKEN = process.env.GH_TOKEN;
 var REPO = 'R-star-ioi/bluestar-guard';
 
-// ---- 参数（吃掉旧版的 <远端commit> 位置参数） ----
 var args = process.argv.slice(2);
 if (args.length && /^[0-9a-f]{7,40}$/i.test(args[0])) {
   console.log('ignore legacy arg:', args.shift());
@@ -26,8 +26,8 @@ if (args.length && /^[0-9a-f]{7,40}$/i.test(args[0])) {
 var TAG = args[0] || null;
 var TAG_MSG = args[1] || (TAG ? TAG + ' 发布' : null);
 
-function git(a) {
-  return cp.execFileSync('git', a, { maxBuffer: 64 * 1024 * 1024 });
+function git(a, raw) {
+  return cp.execFileSync('git', a, { maxBuffer: 256 * 1024 * 1024, encoding: raw ? 'buffer' : 'utf8' });
 }
 
 function isoDate(v) {
@@ -44,10 +44,24 @@ function isoDate(v) {
 }
 
 function who(line) {
-  // "Name <mail@x> 1793128338 +0800"
   var m = line.match(/^(.*) <(.*)> (\d+\s+[+-]\d{4})$/);
   if (!m) throw new Error('bad ident: ' + line);
   return { name: m[1], email: m[2], date: isoDate(m[3]) };
+}
+
+function parseCommit(sha) {
+  var raw = git(['cat-file', '-p', sha], true);
+  var sep = raw.indexOf('\n\n');
+  var out = { tree: null, parents: [], message: raw.slice(sep + 2).toString() };
+  raw.slice(0, sep).toString().split('\n').forEach(function (line) {
+    var i = line.indexOf(' ');
+    var k = line.slice(0, i), v = line.slice(i + 1);
+    if (k === 'tree') out.tree = v;
+    else if (k === 'parent') out.parents.push(v);
+    else if (k === 'author') out.author = who(v);
+    else if (k === 'committer') out.committer = who(v);
+  });
+  return out;
 }
 
 function api(method, path, data) {
@@ -75,40 +89,76 @@ function api(method, path, data) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(40000, function () { req.destroy(new Error('timeout')); });
+    req.setTimeout(60000, function () { req.destroy(new Error('timeout')); });
     if (body) req.write(body);
     req.end();
   });
 }
 
-function run() {
-  var sha = git(['rev-parse', 'HEAD']).toString().trim();
-  var raw = git(['cat-file', '-p', sha]);
-  var sep = raw.indexOf('\n\n');
-  var head = raw.slice(0, sep).toString();
-  var message = raw.slice(sep + 2).toString();
+// 本 commit 相对父提交的改动（-z 输出，避免中文路径被转义）
+function changedEntries(parent, sha) {
+  var out = git(['diff-tree', '-r', '-z', '--no-renames', '--raw', parent, sha], true);
+  var tok = out.toString('utf8').split('\u0000');
+  var list = [];
+  for (var i = 0; i < tok.length; i++) {
+    var t = tok[i];
+    if (t.charAt(0) !== ':') continue;
+    var p = t.slice(1).split(' ');
+    var newSha = p[3], status = p[4], path = tok[i + 1];
+    i++;
+    list.push({ mode: p[1], sha: newSha, status: status, path: path });
+  }
+  return list;
+}
 
-  var tree = null, parents = [], author = null, committer = null;
-  head.split('\n').forEach(function (line) {
-    var i = line.indexOf(' ');
-    var k = line.slice(0, i), v = line.slice(i + 1);
-    if (k === 'tree') tree = v;
-    else if (k === 'parent') parents.push(v);
-    else if (k === 'author') author = who(v);
-    else if (k === 'committer') committer = who(v);
-  });
+function run() {
+  var sha = git(['rev-parse', 'HEAD']).trim();
+  var c = parseCommit(sha);
+  var parent = c.parents[0];
+  if (!parent) throw new Error('根提交不支持，请先手动推一次');
 
   console.log('local commit', sha);
-  console.log('tree', tree, '| parents', parents.join(' '));
-  var payload = { message: message, tree: tree, parents: parents, author: author, committer: committer };
+  console.log('tree', c.tree, '| parent', parent);
 
-  return api('POST', 'git/commits', payload).then(function (c) {
-    console.log('remote commit', c.sha, '| match =', c.sha === sha);
-    if (c.sha !== sha) {
-      throw new Error('sha 不一致：本 commit 依赖的 tree/commit 对象不在远端。\n' +
-        '  先把对象传上去（例如 git push origin refs/tags/<tag>），再重跑本脚本。');
-    }
-    return api('PATCH', 'git/refs/heads/main', { sha: c.sha, force: true });
+  return api('GET', 'git/commits/' + parent).then(function () {
+    var changes = changedEntries(parent, sha).filter(function (f) {
+      return f.sha !== '0000000000000000000000000000000000000000';
+    });
+    console.log('changed files:', changes.length);
+
+    var chain = Promise.resolve([]);
+    changes.forEach(function (f) {
+      chain = chain.then(function (entries) {
+        var blob = git(['cat-file', 'blob', f.sha], true);
+        return api('POST', 'git/blobs', { content: blob.toString('base64'), encoding: 'base64' })
+          .then(function (b) {
+            if (b.sha !== f.sha) throw new Error('blob 校验失败: ' + f.path);
+            entries.push({ path: f.path, mode: f.mode, type: 'blob', sha: b.sha });
+            return entries;
+          });
+      });
+    });
+
+    return chain.then(function (entries) {
+      // 删除的文件用 sha:null 从 base tree 中移除
+      changedEntries(parent, sha).forEach(function (f) {
+        if (f.sha === '0000000000000000000000000000000000000000') {
+          entries.push({ path: f.path, mode: f.mode, type: 'blob', sha: null });
+        }
+      });
+      return api('POST', 'git/trees', { base_tree: git(['rev-parse', parent + '^{tree}']).trim(), tree: entries });
+    });
+  }).then(function (tree) {
+    console.log('tree', tree.sha, '| match =', tree.sha === c.tree);
+    if (tree.sha !== c.tree) throw new Error('tree sha 不一致，检查 diff-tree 结果');
+    return api('POST', 'git/commits', {
+      message: c.message, tree: tree.sha, parents: c.parents,
+      author: c.author, committer: c.committer
+    });
+  }).then(function (rc) {
+    console.log('remote commit', rc.sha, '| match =', rc.sha === sha);
+    if (rc.sha !== sha) throw new Error('commit sha 不一致：author/committer/message 有出入');
+    return api('PATCH', 'git/refs/heads/main', { sha: rc.sha, force: true });
   }).then(function (ref) {
     console.log('main ->', ref.object.sha);
     if (!TAG) return null;
@@ -117,9 +167,7 @@ function run() {
         return api('PATCH', 'git/refs/tags/' + TAG, { sha: t.sha, force: true }).catch(function () {
           return api('POST', 'git/refs', { ref: 'refs/tags/' + TAG, sha: t.sha });
         });
-      }).then(function (r) {
-        console.log('tag', TAG, '->', r.object.sha);
-      });
+      }).then(function (r) { console.log('tag', TAG, '->', r.object.sha); });
   }).then(function () {
     console.log('ALL DONE');
   }).catch(function (e) {
