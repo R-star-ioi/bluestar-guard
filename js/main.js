@@ -654,6 +654,7 @@ var G = require('./boot.js');
     },
 
     render: function () {
+      if (G.P.checkViewport) G.P.checkViewport();   // 视口变化时先重设画布，防止边缘残留
       var ctx = G.P.ctx;
       var W = G.P.screenW, H = G.P.screenH;
       var ox, oy;

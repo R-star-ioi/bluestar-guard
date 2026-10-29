@@ -36,12 +36,24 @@ var G = require('../boot.js');
 
   if (!P.isWx) {
     window.addEventListener('resize', function () {
-      P.screenW = window.innerWidth;
-      P.screenH = window.innerHeight;
-      setup();
-      if (G.game && G.game.onResize) G.game.onResize();
+      P.checkViewport();
     });
   }
+
+  // 每帧自检视口：最大化、滚动条出现/消失、开发者工具开合等场景
+  // 不一定触发 resize 事件（或延迟），靠轮询兜底，画布永远铺满窗口
+  P.checkViewport = function () {
+    if (P.isWx) return false;
+    var w = window.innerWidth, h = window.innerHeight;
+    if (w !== P.screenW || h !== P.screenH) {
+      P.screenW = w;
+      P.screenH = h;
+      setup();
+      if (G.game && G.game.onResize) G.game.onResize();
+      return true;
+    }
+    return false;
+  };
 
   // ---- 触摸 ----
   P.onTouch = null; // 由 Input 注入: function(type, id, x, y)
