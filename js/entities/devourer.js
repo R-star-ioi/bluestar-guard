@@ -187,7 +187,7 @@ var G = require('../boot.js');
         w.spitT -= dt;
         if (w.spitT <= 0) {
           var headK = head.hp / head.maxHp;
-          w.spitT = (headK < 0.4 ? 1.1 : 2.4) * U.rand(0.85, 1.2);   // 头血低 → 射更频繁
+          w.spitT = (headK < 0.4 ? D.DEVOURER.SPIT_T_LOW : D.DEVOURER.SPIT_T) * U.rand(0.85, 1.2);   // 头血低 → 射更频繁
           var seg;
           if (w.segs.length === 1 || Math.random() < 0.4) seg = head;
           else seg = w.segs[1 + Math.floor(Math.random() * (w.segs.length - 1))];

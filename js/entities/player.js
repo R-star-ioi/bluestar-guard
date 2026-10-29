@@ -27,7 +27,7 @@ var G = require('../boot.js');
       Player.face = 1;
       Player.noHealT = 0; Player.slowDebuffT = 0; Player.vulnT = 0;   // 吞噬者减益
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
-      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
+      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0, eagle: 0, vision: 0, knock: 0 };
       // 武器战斗状态（灼烧/场效果/箭雨蓄能）
       if (G.WeaponFX) G.WeaponFX.reset();
     },
@@ -65,6 +65,10 @@ var G = require('../boot.js');
       return Player.attack() * (1 + cr * (cm - 1)) / Player.interval();
     },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
+    // 攻击射程：主角基础 × 武器射程倍率 × 鹰眼强化（每级 +5%）
+    attackRange: function () {
+      return Player.proto.range * (1 + (Player.stats.eagle || 0) * 0.05);
+    },
 
     update: function (dt, game) {
       if (Player.dead) return;
@@ -98,7 +102,7 @@ var G = require('../boot.js');
       // 自动攻击：找射程内最近敌人
       Player.attackTimer -= dt;
       if (Player.attackTimer <= 0) {
-        var target = game.findNearestEnemy(Player.x, Player.y, Player.proto.range);
+        var target = game.findNearestEnemy(Player.x, Player.y, Player.attackRange());
         if (target) {
           Player.attackTimer = Player.interval();
           if (Player.proto.melee) Player.melee(game, target);
@@ -115,6 +119,7 @@ var G = require('../boot.js');
       var ws = Player.proto.weapon;
       var atk = Player.attack();
       var fake = ws ? { wx: ws, atk0: atk, dmg: atk } : null;
+      var knockK = Player.stats.knock || 0;
       G.FX.ring(Player.x, Player.y, Player.proto.color, range, 0.22, 3);
       var near = game.grid.query(Player.x, Player.y, range + 30);
       var seen = {};
@@ -127,6 +132,12 @@ var G = require('../boot.js');
           var ang = U.angle(Player.x, Player.y, e.x, e.y);
           var res = game.damageEnemy(e, atk, e.x, e.y, false);
           if (fake && G.WeaponFX) G.WeaponFX.onHit(fake, e, game, res && res.crit);
+          // 震荡弹头：近战击退（方向 = 玩家指向敌人）
+          if (knockK > 0 && !e.isWorm) {
+            var kd2 = Math.sqrt(U.dist2(Player.x, Player.y, e.x, e.y)) || 1;
+            e.kbX += (e.x - Player.x) / kd2 * (150 + knockK * 45);
+            e.kbY += (e.y - Player.y) / kd2 * (150 + knockK * 45);
+          }
           G.FX.spray(e.x, e.y, ang, 3, '#ffd9a0', 130, 0.3, 3);
           hitAny = true;
         }
@@ -177,7 +188,8 @@ var G = require('../boot.js');
           life: (p.range + 60) / (p.bulletSpeed || 560),
           kind: kind,
           wx: ws,
-          atk0: atk
+          atk0: atk,
+          knock: Player.stats.knock || 0
         });
       }
       Player.face = baseAng >= -Math.PI / 2 && baseAng <= Math.PI / 2 ? 1 : -1;

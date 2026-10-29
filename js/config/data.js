@@ -75,15 +75,17 @@ var G = require('../boot.js');
     SEG_COUNT: 72,         // 体节数
     SEG_R: 32,             // 体节半径（≈基地大小，玩家 r14 的 5 倍直径量级）
     SEG_SPACING: 40,       // 节间距（轻微重叠，视觉连贯）
-    SPEED_RATIO: 0.35,     // 普通移动 = 玩家速度 × 0.35
+    SPEED_RATIO: 0.5,      // 普通移动 = 玩家速度 × 0.5
     DASH_SPEED_RATIO: 0.9, // 冲撞时 = 玩家速度 × 0.9
+    DASH_CD: 3.5,          // 冲撞冷却（秒）
+    SPIT_T: 1.6,           // 魔唾液射击间隔（秒）
+    SPIT_T_LOW: 0.75,      // 头部低血量时的射击间隔
     DASH_DMG: 55,          // 冲撞
     SPIT_DMG: 15,          // 魔唾液命中
     POOL_DMG: 10,          // 魔唾液落地的酸液
     TOUCH_DMG: 5,          // 碰到身体
     RESIST: 0.20,          // 全伤害减免 20%
     AOE_RESIST: 0.80,      // 爆炸/范围类伤害额外减免 80%
-    DASH_CD: 6,            // 冲撞冷却
     SPIT_SPEED: 175,
     // 基础总血量：L1 50万 / L2 500万 / L3 5000万 / L4 5500万，L5 起每关 ×1.5
     HP_BASE: [500000, 5000000, 50000000, 55000000],
@@ -165,7 +167,10 @@ var G = require('../boot.js');
     { id: 'magnet', name: '磁力手套', icon: '🧲', max: 3, desc: lv => '拾取范围 +' + (lv * 45) + '%' },
     { id: 'gold', name: '点金之手', icon: '💰', max: 3, desc: lv => '金币获取 +' + (lv * 25) + '%' },
     { id: 'allydmg', name: '战友强化', icon: '🤝', max: 3, desc: lv => '全英雄伤害 +' + (lv * 15) + '%' },
-    { id: 'allyspd', name: '集结战鼓', icon: '🥁', max: 3, desc: lv => '全英雄攻速 +' + (lv * 10) + '%' }
+    { id: 'allyspd', name: '集结战鼓', icon: '🥁', max: 3, desc: lv => '全英雄攻速 +' + (lv * 10) + '%' },
+    { id: 'eagle', name: '鹰眼', icon: '🔭', max: 5, desc: lv => '攻击射程 +' + (lv * 5) + '%' },
+    { id: 'vision', name: '苍穹视界', icon: '👁', max: 3, desc: lv => '视野扩大 ' + (lv * 10) + '%，看得更远' },
+    { id: 'knock', name: '震荡弹头', icon: '🔨', max: 5, desc: lv => lv === 1 ? '普攻可击退敌人' : '击退力度提升 ' + ((lv - 1) * 30) + '%' }
   ];
   D.SKILL_FALLBACKS = [
     { id: 'healfull', name: '瞬间治愈', icon: '💖', desc: () => '立即回复 50% 生命' },
@@ -240,6 +245,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.22', title: '属性面板 + 新强化 + 拉怪距离', lines: ['DPS 旁新增「?」按钮，点开查看主角全部属性（攻击/攻速/暴击/武器加成/局内强化）', '金币左侧显示当前主角等级 Lv', '升级三选一新强化：鹰眼（射程+5%×5）、苍穹视界（视野+10%×3）、震荡弹头（普攻击退，力度随等级）', '崩解爆弹对 Boss 单次伤害硬上限 15%（暴击也压不住，彻底无法秒 Boss）', '吞噬者移速回到玩家 50%，冲撞冷却 3.5s、唾液 1.6s（低血 0.75s）', '怪物仇恨距离 190 → 260，站得离基地远一点也能把怪拉过来'] },
     { ver: 'v0.5.21', title: '爆弹连锁性能优化', lines: ['修复：崩解爆弹连锁打到世界吞噬者的 72 个体节时指数级增殖，卡成幻灯片甚至死机', '体节不再作为连锁跳板；连锁爆弹并发上限 24；每帧最多引爆 2 个；同帧多爆只播一次音效/震屏'] },
     { ver: 'v0.5.20', title: '吞噬者战基地无敌', lines: ['世界吞噬者存活期间基地被保护罩罩住：完全无敌（青色能量罩可视化），Boss 战专心走位'] },
     { ver: 'v0.5.19', title: '吞噬者战保护基地', lines: ['世界吞噬者存活期间，基地每次受击只扣 1hp，安心走位躲 Boss'] },
@@ -291,7 +297,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.21';
+  D.VERSION = 'v0.5.22';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {

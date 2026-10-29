@@ -83,7 +83,7 @@ var G = require('../boot.js');
     },
 
     // ---- 仇恨AI：玩家在仇恨半径内则追玩家，否则冲基地 ----
-    aggroRange: 190,
+    aggroRange: 260,
     update: function (dt, game) {
       var pl = G.Player, b = game.base;
       var list = Enemy.list;

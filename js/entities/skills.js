@@ -153,13 +153,8 @@ var G = require('../boot.js');
         seen[e.x + '_' + e.y] = 1;
         var rr = r + e.r;
         if (U.dist2(x, y, e.x, e.y) <= rr * rr) {
-          // Boss（含世界吞噬者体节）：单次爆炸伤害上限 = 其最大血量 15%，防无限连锁秒杀
-          var bd = dmg;
-          if (e.boss || e.isWorm) {
-            var cap = e.maxHp * 0.15;
-            if (bd > cap) bd = cap;
-          }
-          game.damageEnemy(e, bd, x, y, true, { aoe: true });
+          // Boss / 吞噬者：单爆最终伤害 ≤ maxHp×15%（由 damageEnemy 的 capPct 兜底，暴击也压不住）
+          game.damageEnemy(e, dmg, x, y, true, { aoe: true, capPct: 0.15 });
           if (isShield && !e.dead) {
             var kd = Math.sqrt(U.dist2(x, y, e.x, e.y)) || 1;
             e.kbX = (e.x - x) / kd * 260;

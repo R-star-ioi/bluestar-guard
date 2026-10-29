@@ -14,6 +14,8 @@ var G = require('../boot.js');
       UI.buttons.push({ id: id, x: x, y: y, w: w, h: h, onTap: onTap });
     },
     hitTest: function (x, y) {
+      // 属性面板打开时吞掉所有 UI 点击（任意点击只关面板，不点穿底下按钮）
+      if (G.game && G.game.statsOpen) return null;
       // 后注册的在上层，倒序命中
       for (var i = UI.buttons.length - 1; i >= 0; i--) {
         var b = UI.buttons[i];
@@ -122,7 +124,24 @@ var G = require('../boot.js');
       ctx.fillStyle = '#7ef9ff';
       ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
 
-      // 吞噬者减益（DPS 右侧顺排；纵向与 Boss 血条错开）
+      // 「?」属性面板按钮（点击查看主角各项属性）
+      ctx.fillStyle = 'rgba(10,16,40,0.8)';
+      ctx.beginPath();
+      ctx.arc(104, 65, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(126,249,255,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#7ef9ff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('?', 104, 69.5);
+      UI.reg('statinfo', 92, 53, 24, 24, function () {
+        G.Audio.play('button');
+        Game.statsOpen = !Game.statsOpen;
+      });
+
+      // 吞噬者减益（「?」右侧顺排；纵向与 Boss 血条错开）
       var deb = [];
       if (pl.noHealT > 0) deb.push('禁疗 ' + Math.ceil(pl.noHealT) + 's');
       if (pl.slowDebuffT > 0) deb.push('减速 ' + Math.ceil(pl.slowDebuffT) + 's');
@@ -130,7 +149,8 @@ var G = require('../boot.js');
       if (deb.length) {
         ctx.font = 'bold 10px sans-serif';
         ctx.fillStyle = '#ff8f8f';
-        ctx.fillText(deb.join('  '), 130, 70);
+        ctx.textAlign = 'left';
+        ctx.fillText(deb.join('  '), 152, 70);
       }
 
       // 关卡与波次（中）
@@ -154,6 +174,11 @@ var G = require('../boot.js');
       // 右上资源栏：只显示局内金币（钻石是局外资源，回主界面才展示）
       var gw = 74;
       var gx = W - 60 - gw;
+      // 主角当前等级（金币左侧）
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText('Lv ' + (game.level || 1), gx - 10, 34);
       UI.pill(ctx, gx, 18, gw, 24, 'rgba(0,0,0,0.45)', 12);
       UI.drawCoin(ctx, gx + 15, 30, 7);
       ctx.font = 'bold 12px sans-serif';
@@ -263,6 +288,89 @@ var G = require('../boot.js');
     },
 
     // 波次开场横幅 / 消息（支持 '\n' 换行，多行时整体居中）
+    // 主角属性面板（点 HUD 上的「?」打开，点任意处关闭）
+    drawStatsPanel: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var pl = G.Player;
+      var ws = pl.proto ? pl.proto.weapon : null;
+      var rows = [];
+
+      rows.push(['-', '-']);
+      rows.push(['攻击力', Math.round(pl.attack() * 10) / 10]);
+      rows.push(['攻击速度', (1 / pl.interval()).toFixed(2) + ' 次/秒']);
+      rows.push(['攻击射程', Math.round(pl.attackRange())]);
+      rows.push(['暴击率 / 暴伤', Math.round(pl.critRate() * 100) + '% / ×' + pl.critMult().toFixed(2)]);
+      rows.push(['秒伤 DPS', Math.round(pl.dpsShow())]);
+
+      rows.push(['w', '武器加成' + (ws ? '（' + G.Weapon.TIERS[ws.tier].name + ' ' + ws.star + '★）' : '（无装备）')]);
+      rows.push(['攻击力', ws ? '+' + Math.round(ws.atk * 100) + '%' : '—']);
+      rows.push(['攻击速度', ws ? '+' + Math.round(ws.aspd * 100) + '%' : '—']);
+      if (ws) {
+        rows.push(['暴击率 / 暴伤', '+' + Math.round((ws.crit || 0) * 100) + '% / +' + Math.round((ws.critDmg || 0) * 100) + '%']);
+        if (ws.alldmg) rows.push(['全伤害', '+' + Math.round(ws.alldmg * 100) + '%']);
+        if (ws.range && ws.range !== 1) rows.push(['射程', '×' + ws.range]);
+        if (ws.pierce) rows.push(['穿透', ws.pierceAll ? '全部敌人' : ws.pierce + ' 人（每穿 ' + Math.round((ws.pierceInc || 0) * 100) + '%）']);
+      }
+
+      rows.push(['w', '局内强化']);
+      rows.push(['主角等级', 'Lv ' + (game.level || 1)]);
+      rows.push(['波次攻击成长', '+' + Math.round((pl.stats.waveAtk || 0) * 100) + '%']);
+      if (pl.stats.atk) rows.push(['攻击强化', 'Lv ' + pl.stats.atk + '（+' + pl.stats.atk * 20 + '%）']);
+      if (pl.stats.aspeed) rows.push(['疾速射击', 'Lv ' + pl.stats.aspeed + '（-' + pl.stats.aspeed * 8 + '% 间隔）']);
+      if (pl.stats.crit) rows.push(['致命打击', 'Lv ' + pl.stats.crit + '（+' + pl.stats.crit * 8 + '% 暴击）']);
+      if (pl.stats.eagle) rows.push(['鹰眼（射程）', 'Lv ' + pl.stats.eagle + '（+' + pl.stats.eagle * 5 + '%）']);
+      if (pl.stats.vision) rows.push(['苍穹视界', 'Lv ' + pl.stats.vision + '（视野 +' + pl.stats.vision * 10 + '%）']);
+      if (pl.stats.knock) rows.push(['震荡弹头', 'Lv ' + pl.stats.knock]);
+
+      // 面板底
+      var pw = Math.min(320, W - 40);
+      var ph = 96 + rows.length * 24 + 34;
+      var px = (W - pw) / 2, py = Math.max(70, (H - ph) / 2);
+      ctx.fillStyle = 'rgba(6,10,26,0.94)';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
+      else ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = 'rgba(126,249,255,0.5)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px + 0.5, py + 0.5, pw - 1, ph - 1, 16); ctx.stroke(); }
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText('主角属性', W / 2, py + 30);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('Lv ' + (pl.proto ? pl.proto.level : 1) + ' ' + (pl.proto ? pl.proto.name : ''), W / 2, py + 48);
+
+      var ry = py + 74;
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (row[0] === '-') { ry += 6; continue; }
+        if (row[0] === 'w') {
+          ry += 10;
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.fillStyle = '#ffd166';
+          ctx.fillText('◆ ' + row[1], px + 20, ry + 8);
+          ry += 16;
+          continue;
+        }
+        ctx.textAlign = 'left';
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText(row[0], px + 20, ry);
+        ctx.textAlign = 'right';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(String(row[1]), px + pw - 20, ry);
+        ry += 22;
+      }
+
+      ctx.textAlign = 'center';
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('点击任意处关闭', W / 2, py + ph - 14);
+    },
+
     drawAnnounce: function (ctx, game, yPct) {
       if (!game.msg || game.msg.t <= 0) return;
       var W = G.P.screenW, H = G.P.screenH;

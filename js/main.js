@@ -78,6 +78,7 @@ var G = require('./boot.js');
       G.Meta.selectedLevel = level;
       G.Meta.save();
       if (G.Devourer) G.Devourer.reset();   // 停掉上一局的吞噬者与 BGM
+      if (G.Camera) G.Camera.setZoom(1);    // 视距重置
       Game.gold = D2.ECONOMY.START_GOLD;
       Game.level = 1; Game.xp = 0; Game.xpNext = 5;
       Game.kills = 0; Game.playTime = 0;
@@ -327,6 +328,10 @@ var G = require('./boot.js');
           G.Player.maxHp += 30;
           G.Player.hp = Math.min(G.Player.maxHp, G.Player.hp + 30);
           break;
+        case 'vision':
+          st.vision = (st.vision || 0) + 1;
+          if (G.Camera) G.Camera.setZoom(1 - 0.1 * st.vision);
+          break;
         default: st[opt.id] = (st[opt.id] || 0) + 1;
       }
       G.Audio.play('upgrade');
@@ -377,6 +382,11 @@ var G = require('./boot.js');
       if (e.isWorm && G.Devourer) {
         dmg *= (1 - D.DEVOURER.RESIST);
         if (opts && opts.aoe) dmg *= (1 - D.DEVOURER.AOE_RESIST);
+      }
+      // 崩解爆弹防秒杀：带 capPct 时，Boss/吞噬者体节的最终伤害 ≤ maxHp×capPct（暴击也压不住）
+      if (opts && opts.capPct && (e.boss || e.isWorm)) {
+        var cap = e.maxHp * opts.capPct;
+        if (dmg > cap) dmg = cap;
       }
       G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
@@ -487,7 +497,12 @@ var G = require('./boot.js');
         Game.panelHero = null;
         return;
       }
-      var wx = x + Game.viewOx, wy = y + Game.viewOy;
+      // 属性面板打开时，任意点击仅关闭面板（不点穿底下按钮）
+      if (Game.statsOpen) {
+        Game.statsOpen = false;
+        return;
+      }
+      var wx = x / (G.Camera.zoom || 1) + Game.viewOx, wy = y / (G.Camera.zoom || 1) + Game.viewOy;
       // 优先英雄拖拽
       var h = G.Hero.hitTest(wx, wy);
       if (h) {
@@ -537,7 +552,7 @@ var G = require('./boot.js');
       }
       // 英雄拖拽
       if (Game.drag && Game.drag.id === id) {
-        var wx = x + Game.viewOx, wy = y + Game.viewOy;
+        var wx = x / (G.Camera.zoom || 1) + Game.viewOx, wy = y / (G.Camera.zoom || 1) + Game.viewOy;
         if (U.dist2(x, y, Game.drag.sx, Game.drag.sy) > 14 * 14) Game.drag.moved = true;
         if (Game.drag.moved) {
           Game.drag.hero.x = wx;
@@ -573,7 +588,7 @@ var G = require('./boot.js');
           G.Audio.play('button');
         } else {
           // 尝试合成（排除被拖拽者本身，否则永远命中自己）
-          var wx = x + Game.viewOx, wy = y + Game.viewOy;
+          var wx = x / (G.Camera.zoom || 1) + Game.viewOx, wy = y / (G.Camera.zoom || 1) + Game.viewOy;
           var other = G.Hero.hitTest(wx, wy, drag.hero);
           if (other && other !== drag.hero && G.Hero.canMerge(drag.hero, other)) {
             G.Hero.merge(drag.hero, other, Game);
@@ -656,7 +671,9 @@ var G = require('./boot.js');
         return;
       }
 
-      // 世界层
+      // 世界层（苍穹视界：zoom < 1 时整层放大绘制，视野更远）
+      var wz = G.Camera.zoom || 1;
+      if (wz !== 1) ctx.setTransform(G.P.dpr * wz, 0, 0, G.P.dpr * wz, 0, 0);
       G.Bg.draw(ctx, ox, oy);
       G.Bg.drawBase(ctx, Game.base, ox, oy);
       G.Pickup.draw(ctx, ox, oy);
@@ -689,6 +706,9 @@ var G = require('./boot.js');
       }
       G.FX.drawTexts(ctx, ox, oy);
 
+      // UI 层（恢复未缩放变换，HUD 始终铺满屏幕）
+      ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
+
       // 经验条（屏幕最底部细条）
       var xpR = Math.min(1, Game.xp / Game.xpNext);
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -696,15 +716,14 @@ var G = require('./boot.js');
       ctx.fillStyle = '#2ecc71';
       ctx.fillRect(0, H - 4, W * xpR, 4);
 
-      // UI 层
       G.UI.draw(ctx, Game);
-
-      // 低血量红晕
       var hpr = G.Player.hp / G.Player.maxHp;
       if (Game.state === 'playing' && hpr < 0.3) {
         ctx.fillStyle = 'rgba(255,0,0,' + (0.12 + 0.08 * Math.sin(Date.now() / 200)) + ')';
         ctx.fillRect(0, 0, W, H);
       }
+      // 主角属性面板（最顶层）
+      if (Game.statsOpen && G.UI.drawStatsPanel) G.UI.drawStatsPanel(ctx, Game);
     }
   };
 

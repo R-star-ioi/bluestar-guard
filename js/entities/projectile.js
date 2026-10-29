@@ -19,6 +19,7 @@ var G = require('../boot.js');
         pierceInc: o.pierceInc || 0,// 每穿透一人伤害变化
         homing: o.homing || null,   // 追踪目标
         shadow: !!o.shadow,         // 暗影分裂箭（击杀返冷却）
+        knock: o.knock || 0,        // 震荡弹头击退等级
         trailX: 1e9, trailY: 1e9
       });
     },
@@ -78,6 +79,13 @@ var G = require('../boot.js');
           if (p.echo && G.Skills) G.Skills._echoOnHit(e, game, G.Skills.levelOf('echo'));
           // 武器命中特效（冰霜 / 分裂 / 炎爆）
           if (p.wx && G.WeaponFX) G.WeaponFX.onHit(p, e, game, res && res.crit);
+          // 震荡弹头：普攻击退（沿弹道方向推开）
+          if (p.knock > 0 && !e.isWorm) {
+            var ksp = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1;
+            var kf = 150 + p.knock * 45;
+            e.kbX += p.vx / ksp * kf;
+            e.kbY += p.vy / ksp * kf;
+          }
           // 暗影箭击杀 → 返还 0.1s 攻击冷却
           if (p.shadow && e.dead) G.Player.attackTimer -= 0.1;
           if (p.hitSet) p.hitSet.push(e);

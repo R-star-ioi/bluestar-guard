@@ -367,34 +367,43 @@ var G = require('../boot.js');
 
 });
 __def("js/core/camera.js", function (module, exports, require) {
-// 相机：跟随玩家，限制在地图范围内，支持震屏
+// 相机：跟随玩家，限制在地图范围内，支持震屏与视距缩放
 var G = require('../boot.js');
 (function () {
   var Camera = {
     x: 0, y: 0, // 视口左上角（世界坐标）
+    zoom: 1,    // 视距倍率：1 = 标准，<1 看得更远（苍穹视界强化）
     shakeT: 0, shakePower: 0,
     init: function (mapW, mapH) {
       Camera.mapW = mapW; Camera.mapH = mapH;
+      Camera.zoom = 1;
       Camera.x = (mapW - G.P.screenW) / 2;
       Camera.y = (mapH - G.P.screenH) / 2;
     },
+    setZoom: function (z) {
+      Camera.zoom = G.U.clamp(z, 0.6, 1);
+      Camera.clampPos();
+    },
+    // 视口实际覆盖的世界尺寸（随 zoom 变大）
+    viewW: function () { return G.P.screenW / Camera.zoom; },
+    viewH: function () { return G.P.screenH / Camera.zoom; },
     snapTo: function (x, y) {
-      Camera.x = x - G.P.screenW / 2;
-      Camera.y = y - G.P.screenH / 2;
+      Camera.x = x - Camera.viewW() / 2;
+      Camera.y = y - Camera.viewH() / 2;
       Camera.clampPos();
     },
     update: function (dt, tx, ty) {
       // 平滑跟随
-      var gx = tx - G.P.screenW / 2;
-      var gy = ty - G.P.screenH / 2;
+      var gx = tx - Camera.viewW() / 2;
+      var gy = ty - Camera.viewH() / 2;
       Camera.x += (gx - Camera.x) * Math.min(1, dt * 6);
       Camera.y += (gy - Camera.y) * Math.min(1, dt * 6);
       Camera.clampPos();
       if (Camera.shakeT > 0) Camera.shakeT -= dt;
     },
     clampPos: function () {
-      Camera.x = G.U.clamp(Camera.x, 0, Math.max(0, Camera.mapW - G.P.screenW));
-      Camera.y = G.U.clamp(Camera.y, 0, Math.max(0, Camera.mapH - G.P.screenH));
+      Camera.x = G.U.clamp(Camera.x, 0, Math.max(0, Camera.mapW - Camera.viewW()));
+      Camera.y = G.U.clamp(Camera.y, 0, Math.max(0, Camera.mapH - Camera.viewH()));
     },
     shake: function (power, time) {
       Camera.shakePower = Math.max(Camera.shakePower * 0.5, power);
@@ -596,15 +605,17 @@ var G = require('../boot.js');
     SEG_COUNT: 72,         // 体节数
     SEG_R: 32,             // 体节半径（≈基地大小，玩家 r14 的 5 倍直径量级）
     SEG_SPACING: 40,       // 节间距（轻微重叠，视觉连贯）
-    SPEED_RATIO: 0.35,     // 普通移动 = 玩家速度 × 0.35
+    SPEED_RATIO: 0.5,      // 普通移动 = 玩家速度 × 0.5
     DASH_SPEED_RATIO: 0.9, // 冲撞时 = 玩家速度 × 0.9
+    DASH_CD: 3.5,          // 冲撞冷却（秒）
+    SPIT_T: 1.6,           // 魔唾液射击间隔（秒）
+    SPIT_T_LOW: 0.75,      // 头部低血量时的射击间隔
     DASH_DMG: 55,          // 冲撞
     SPIT_DMG: 15,          // 魔唾液命中
     POOL_DMG: 10,          // 魔唾液落地的酸液
     TOUCH_DMG: 5,          // 碰到身体
     RESIST: 0.20,          // 全伤害减免 20%
     AOE_RESIST: 0.80,      // 爆炸/范围类伤害额外减免 80%
-    DASH_CD: 6,            // 冲撞冷却
     SPIT_SPEED: 175,
     // 基础总血量：L1 50万 / L2 500万 / L3 5000万 / L4 5500万，L5 起每关 ×1.5
     HP_BASE: [500000, 5000000, 50000000, 55000000],
@@ -686,7 +697,10 @@ var G = require('../boot.js');
     { id: 'magnet', name: '磁力手套', icon: '🧲', max: 3, desc: lv => '拾取范围 +' + (lv * 45) + '%' },
     { id: 'gold', name: '点金之手', icon: '💰', max: 3, desc: lv => '金币获取 +' + (lv * 25) + '%' },
     { id: 'allydmg', name: '战友强化', icon: '🤝', max: 3, desc: lv => '全英雄伤害 +' + (lv * 15) + '%' },
-    { id: 'allyspd', name: '集结战鼓', icon: '🥁', max: 3, desc: lv => '全英雄攻速 +' + (lv * 10) + '%' }
+    { id: 'allyspd', name: '集结战鼓', icon: '🥁', max: 3, desc: lv => '全英雄攻速 +' + (lv * 10) + '%' },
+    { id: 'eagle', name: '鹰眼', icon: '🔭', max: 5, desc: lv => '攻击射程 +' + (lv * 5) + '%' },
+    { id: 'vision', name: '苍穹视界', icon: '👁', max: 3, desc: lv => '视野扩大 ' + (lv * 10) + '%，看得更远' },
+    { id: 'knock', name: '震荡弹头', icon: '🔨', max: 5, desc: lv => lv === 1 ? '普攻可击退敌人' : '击退力度提升 ' + ((lv - 1) * 30) + '%' }
   ];
   D.SKILL_FALLBACKS = [
     { id: 'healfull', name: '瞬间治愈', icon: '💖', desc: () => '立即回复 50% 生命' },
@@ -2127,6 +2141,7 @@ var G = require('../boot.js');
         pierceInc: o.pierceInc || 0,// 每穿透一人伤害变化
         homing: o.homing || null,   // 追踪目标
         shadow: !!o.shadow,         // 暗影分裂箭（击杀返冷却）
+        knock: o.knock || 0,        // 震荡弹头击退等级
         trailX: 1e9, trailY: 1e9
       });
     },
@@ -2186,6 +2201,13 @@ var G = require('../boot.js');
           if (p.echo && G.Skills) G.Skills._echoOnHit(e, game, G.Skills.levelOf('echo'));
           // 武器命中特效（冰霜 / 分裂 / 炎爆）
           if (p.wx && G.WeaponFX) G.WeaponFX.onHit(p, e, game, res && res.crit);
+          // 震荡弹头：普攻击退（沿弹道方向推开）
+          if (p.knock > 0 && !e.isWorm) {
+            var ksp = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1;
+            var kf = 150 + p.knock * 45;
+            e.kbX += p.vx / ksp * kf;
+            e.kbY += p.vy / ksp * kf;
+          }
           // 暗影箭击杀 → 返还 0.1s 攻击冷却
           if (p.shadow && e.dead) G.Player.attackTimer -= 0.1;
           if (p.hitSet) p.hitSet.push(e);
@@ -2343,7 +2365,7 @@ var G = require('../boot.js');
       Player.face = 1;
       Player.noHealT = 0; Player.slowDebuffT = 0; Player.vulnT = 0;   // 吞噬者减益
       Player.r = Player.proto.melee ? 16 : D.PLAYER.RADIUS;
-      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0 };
+      Player.stats = { atk: 0, aspeed: 0, multi: 0, pierce: 0, crit: 0, bigshot: 0, regen: 0, leech: 0, speed: 0, magnet: 0, gold: 0, allydmg: 0, allyspd: 0, waveAtk: 0, eagle: 0, vision: 0, knock: 0 };
       // 武器战斗状态（灼烧/场效果/箭雨蓄能）
       if (G.WeaponFX) G.WeaponFX.reset();
     },
@@ -2381,6 +2403,10 @@ var G = require('../boot.js');
       return Player.attack() * (1 + cr * (cm - 1)) / Player.interval();
     },
     pickRange: function () { return D.PLAYER.PICK_RANGE * (1 + Player.stats.magnet * 0.45) * (1 + (G.Skills ? G.Skills.pickBonus() : 0)); },
+    // 攻击射程：主角基础 × 武器射程倍率 × 鹰眼强化（每级 +5%）
+    attackRange: function () {
+      return Player.proto.range * (1 + (Player.stats.eagle || 0) * 0.05);
+    },
 
     update: function (dt, game) {
       if (Player.dead) return;
@@ -2414,7 +2440,7 @@ var G = require('../boot.js');
       // 自动攻击：找射程内最近敌人
       Player.attackTimer -= dt;
       if (Player.attackTimer <= 0) {
-        var target = game.findNearestEnemy(Player.x, Player.y, Player.proto.range);
+        var target = game.findNearestEnemy(Player.x, Player.y, Player.attackRange());
         if (target) {
           Player.attackTimer = Player.interval();
           if (Player.proto.melee) Player.melee(game, target);
@@ -2431,6 +2457,7 @@ var G = require('../boot.js');
       var ws = Player.proto.weapon;
       var atk = Player.attack();
       var fake = ws ? { wx: ws, atk0: atk, dmg: atk } : null;
+      var knockK = Player.stats.knock || 0;
       G.FX.ring(Player.x, Player.y, Player.proto.color, range, 0.22, 3);
       var near = game.grid.query(Player.x, Player.y, range + 30);
       var seen = {};
@@ -2443,6 +2470,12 @@ var G = require('../boot.js');
           var ang = U.angle(Player.x, Player.y, e.x, e.y);
           var res = game.damageEnemy(e, atk, e.x, e.y, false);
           if (fake && G.WeaponFX) G.WeaponFX.onHit(fake, e, game, res && res.crit);
+          // 震荡弹头：近战击退（方向 = 玩家指向敌人）
+          if (knockK > 0 && !e.isWorm) {
+            var kd2 = Math.sqrt(U.dist2(Player.x, Player.y, e.x, e.y)) || 1;
+            e.kbX += (e.x - Player.x) / kd2 * (150 + knockK * 45);
+            e.kbY += (e.y - Player.y) / kd2 * (150 + knockK * 45);
+          }
           G.FX.spray(e.x, e.y, ang, 3, '#ffd9a0', 130, 0.3, 3);
           hitAny = true;
         }
@@ -2493,7 +2526,8 @@ var G = require('../boot.js');
           life: (p.range + 60) / (p.bulletSpeed || 560),
           kind: kind,
           wx: ws,
-          atk0: atk
+          atk0: atk,
+          knock: Player.stats.knock || 0
         });
       }
       Player.face = baseAng >= -Math.PI / 2 && baseAng <= Math.PI / 2 ? 1 : -1;
@@ -2757,13 +2791,8 @@ var G = require('../boot.js');
         seen[e.x + '_' + e.y] = 1;
         var rr = r + e.r;
         if (U.dist2(x, y, e.x, e.y) <= rr * rr) {
-          // Boss（含世界吞噬者体节）：单次爆炸伤害上限 = 其最大血量 15%，防无限连锁秒杀
-          var bd = dmg;
-          if (e.boss || e.isWorm) {
-            var cap = e.maxHp * 0.15;
-            if (bd > cap) bd = cap;
-          }
-          game.damageEnemy(e, bd, x, y, true, { aoe: true });
+          // Boss / 吞噬者：单爆最终伤害 ≤ maxHp×15%（由 damageEnemy 的 capPct 兜底，暴击也压不住）
+          game.damageEnemy(e, dmg, x, y, true, { aoe: true, capPct: 0.15 });
           if (isShield && !e.dead) {
             var kd = Math.sqrt(U.dist2(x, y, e.x, e.y)) || 1;
             e.kbX = (e.x - x) / kd * 260;
@@ -3716,7 +3745,7 @@ var G = require('../boot.js');
         w.spitT -= dt;
         if (w.spitT <= 0) {
           var headK = head.hp / head.maxHp;
-          w.spitT = (headK < 0.4 ? 1.1 : 2.4) * U.rand(0.85, 1.2);   // 头血低 → 射更频繁
+          w.spitT = (headK < 0.4 ? D.DEVOURER.SPIT_T_LOW : D.DEVOURER.SPIT_T) * U.rand(0.85, 1.2);   // 头血低 → 射更频繁
           var seg;
           if (w.segs.length === 1 || Math.random() < 0.4) seg = head;
           else seg = w.segs[1 + Math.floor(Math.random() * (w.segs.length - 1))];
@@ -4495,6 +4524,8 @@ var G = require('../boot.js');
       UI.buttons.push({ id: id, x: x, y: y, w: w, h: h, onTap: onTap });
     },
     hitTest: function (x, y) {
+      // 属性面板打开时吞掉所有 UI 点击（任意点击只关面板，不点穿底下按钮）
+      if (G.game && G.game.statsOpen) return null;
       // 后注册的在上层，倒序命中
       for (var i = UI.buttons.length - 1; i >= 0; i--) {
         var b = UI.buttons[i];
@@ -4603,7 +4634,24 @@ var G = require('../boot.js');
       ctx.fillStyle = '#7ef9ff';
       ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
 
-      // 吞噬者减益（DPS 右侧顺排；纵向与 Boss 血条错开）
+      // 「?」属性面板按钮（点击查看主角各项属性）
+      ctx.fillStyle = 'rgba(10,16,40,0.8)';
+      ctx.beginPath();
+      ctx.arc(104, 65, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(126,249,255,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#7ef9ff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('?', 104, 69.5);
+      UI.reg('statinfo', 92, 53, 24, 24, function () {
+        G.Audio.play('button');
+        Game.statsOpen = !Game.statsOpen;
+      });
+
+      // 吞噬者减益（「?」右侧顺排；纵向与 Boss 血条错开）
       var deb = [];
       if (pl.noHealT > 0) deb.push('禁疗 ' + Math.ceil(pl.noHealT) + 's');
       if (pl.slowDebuffT > 0) deb.push('减速 ' + Math.ceil(pl.slowDebuffT) + 's');
@@ -4611,7 +4659,8 @@ var G = require('../boot.js');
       if (deb.length) {
         ctx.font = 'bold 10px sans-serif';
         ctx.fillStyle = '#ff8f8f';
-        ctx.fillText(deb.join('  '), 130, 70);
+        ctx.textAlign = 'left';
+        ctx.fillText(deb.join('  '), 152, 70);
       }
 
       // 关卡与波次（中）
@@ -4635,6 +4684,11 @@ var G = require('../boot.js');
       // 右上资源栏：只显示局内金币（钻石是局外资源，回主界面才展示）
       var gw = 74;
       var gx = W - 60 - gw;
+      // 主角当前等级（金币左侧）
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText('Lv ' + (game.level || 1), gx - 10, 34);
       UI.pill(ctx, gx, 18, gw, 24, 'rgba(0,0,0,0.45)', 12);
       UI.drawCoin(ctx, gx + 15, 30, 7);
       ctx.font = 'bold 12px sans-serif';
@@ -4744,6 +4798,89 @@ var G = require('../boot.js');
     },
 
     // 波次开场横幅 / 消息（支持 '\n' 换行，多行时整体居中）
+    // 主角属性面板（点 HUD 上的「?」打开，点任意处关闭）
+    drawStatsPanel: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var pl = G.Player;
+      var ws = pl.proto ? pl.proto.weapon : null;
+      var rows = [];
+
+      rows.push(['-', '-']);
+      rows.push(['攻击力', Math.round(pl.attack() * 10) / 10]);
+      rows.push(['攻击速度', (1 / pl.interval()).toFixed(2) + ' 次/秒']);
+      rows.push(['攻击射程', Math.round(pl.attackRange())]);
+      rows.push(['暴击率 / 暴伤', Math.round(pl.critRate() * 100) + '% / ×' + pl.critMult().toFixed(2)]);
+      rows.push(['秒伤 DPS', Math.round(pl.dpsShow())]);
+
+      rows.push(['w', '武器加成' + (ws ? '（' + G.Weapon.TIERS[ws.tier].name + ' ' + ws.star + '★）' : '（无装备）')]);
+      rows.push(['攻击力', ws ? '+' + Math.round(ws.atk * 100) + '%' : '—']);
+      rows.push(['攻击速度', ws ? '+' + Math.round(ws.aspd * 100) + '%' : '—']);
+      if (ws) {
+        rows.push(['暴击率 / 暴伤', '+' + Math.round((ws.crit || 0) * 100) + '% / +' + Math.round((ws.critDmg || 0) * 100) + '%']);
+        if (ws.alldmg) rows.push(['全伤害', '+' + Math.round(ws.alldmg * 100) + '%']);
+        if (ws.range && ws.range !== 1) rows.push(['射程', '×' + ws.range]);
+        if (ws.pierce) rows.push(['穿透', ws.pierceAll ? '全部敌人' : ws.pierce + ' 人（每穿 ' + Math.round((ws.pierceInc || 0) * 100) + '%）']);
+      }
+
+      rows.push(['w', '局内强化']);
+      rows.push(['主角等级', 'Lv ' + (game.level || 1)]);
+      rows.push(['波次攻击成长', '+' + Math.round((pl.stats.waveAtk || 0) * 100) + '%']);
+      if (pl.stats.atk) rows.push(['攻击强化', 'Lv ' + pl.stats.atk + '（+' + pl.stats.atk * 20 + '%）']);
+      if (pl.stats.aspeed) rows.push(['疾速射击', 'Lv ' + pl.stats.aspeed + '（-' + pl.stats.aspeed * 8 + '% 间隔）']);
+      if (pl.stats.crit) rows.push(['致命打击', 'Lv ' + pl.stats.crit + '（+' + pl.stats.crit * 8 + '% 暴击）']);
+      if (pl.stats.eagle) rows.push(['鹰眼（射程）', 'Lv ' + pl.stats.eagle + '（+' + pl.stats.eagle * 5 + '%）']);
+      if (pl.stats.vision) rows.push(['苍穹视界', 'Lv ' + pl.stats.vision + '（视野 +' + pl.stats.vision * 10 + '%）']);
+      if (pl.stats.knock) rows.push(['震荡弹头', 'Lv ' + pl.stats.knock]);
+
+      // 面板底
+      var pw = Math.min(320, W - 40);
+      var ph = 96 + rows.length * 24 + 34;
+      var px = (W - pw) / 2, py = Math.max(70, (H - ph) / 2);
+      ctx.fillStyle = 'rgba(6,10,26,0.94)';
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
+      else ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = 'rgba(126,249,255,0.5)';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px + 0.5, py + 0.5, pw - 1, ph - 1, 16); ctx.stroke(); }
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillStyle = '#7ef9ff';
+      ctx.fillText('主角属性', W / 2, py + 30);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('Lv ' + (pl.proto ? pl.proto.level : 1) + ' ' + (pl.proto ? pl.proto.name : ''), W / 2, py + 48);
+
+      var ry = py + 74;
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (row[0] === '-') { ry += 6; continue; }
+        if (row[0] === 'w') {
+          ry += 10;
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.fillStyle = '#ffd166';
+          ctx.fillText('◆ ' + row[1], px + 20, ry + 8);
+          ry += 16;
+          continue;
+        }
+        ctx.textAlign = 'left';
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText(row[0], px + 20, ry);
+        ctx.textAlign = 'right';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(String(row[1]), px + pw - 20, ry);
+        ry += 22;
+      }
+
+      ctx.textAlign = 'center';
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('点击任意处关闭', W / 2, py + ph - 14);
+    },
+
     drawAnnounce: function (ctx, game, yPct) {
       if (!game.msg || game.msg.t <= 0) return;
       var W = G.P.screenW, H = G.P.screenH;
@@ -6300,6 +6437,7 @@ var G = require('./boot.js');
       G.Meta.selectedLevel = level;
       G.Meta.save();
       if (G.Devourer) G.Devourer.reset();   // 停掉上一局的吞噬者与 BGM
+      if (G.Camera) G.Camera.setZoom(1);    // 视距重置
       Game.gold = D2.ECONOMY.START_GOLD;
       Game.level = 1; Game.xp = 0; Game.xpNext = 5;
       Game.kills = 0; Game.playTime = 0;
@@ -6549,6 +6687,10 @@ var G = require('./boot.js');
           G.Player.maxHp += 30;
           G.Player.hp = Math.min(G.Player.maxHp, G.Player.hp + 30);
           break;
+        case 'vision':
+          st.vision = (st.vision || 0) + 1;
+          if (G.Camera) G.Camera.setZoom(1 - 0.1 * st.vision);
+          break;
         default: st[opt.id] = (st[opt.id] || 0) + 1;
       }
       G.Audio.play('upgrade');
@@ -6599,6 +6741,11 @@ var G = require('./boot.js');
       if (e.isWorm && G.Devourer) {
         dmg *= (1 - D.DEVOURER.RESIST);
         if (opts && opts.aoe) dmg *= (1 - D.DEVOURER.AOE_RESIST);
+      }
+      // 崩解爆弹防秒杀：带 capPct 时，Boss/吞噬者体节的最终伤害 ≤ maxHp×capPct（暴击也压不住）
+      if (opts && opts.capPct && (e.boss || e.isWorm)) {
+        var cap = e.maxHp * opts.capPct;
+        if (dmg > cap) dmg = cap;
       }
       G.Enemy.damage(Game, e, dmg, hx, hy, big, crit);
       // 吸血
@@ -6709,7 +6856,12 @@ var G = require('./boot.js');
         Game.panelHero = null;
         return;
       }
-      var wx = x + Game.viewOx, wy = y + Game.viewOy;
+      // 属性面板打开时，任意点击仅关闭面板（不点穿底下按钮）
+      if (Game.statsOpen) {
+        Game.statsOpen = false;
+        return;
+      }
+      var wx = x / (G.Camera.zoom || 1) + Game.viewOx, wy = y / (G.Camera.zoom || 1) + Game.viewOy;
       // 优先英雄拖拽
       var h = G.Hero.hitTest(wx, wy);
       if (h) {
@@ -6759,7 +6911,7 @@ var G = require('./boot.js');
       }
       // 英雄拖拽
       if (Game.drag && Game.drag.id === id) {
-        var wx = x + Game.viewOx, wy = y + Game.viewOy;
+        var wx = x / (G.Camera.zoom || 1) + Game.viewOx, wy = y / (G.Camera.zoom || 1) + Game.viewOy;
         if (U.dist2(x, y, Game.drag.sx, Game.drag.sy) > 14 * 14) Game.drag.moved = true;
         if (Game.drag.moved) {
           Game.drag.hero.x = wx;
@@ -6795,7 +6947,7 @@ var G = require('./boot.js');
           G.Audio.play('button');
         } else {
           // 尝试合成（排除被拖拽者本身，否则永远命中自己）
-          var wx = x + Game.viewOx, wy = y + Game.viewOy;
+          var wx = x / (G.Camera.zoom || 1) + Game.viewOx, wy = y / (G.Camera.zoom || 1) + Game.viewOy;
           var other = G.Hero.hitTest(wx, wy, drag.hero);
           if (other && other !== drag.hero && G.Hero.canMerge(drag.hero, other)) {
             G.Hero.merge(drag.hero, other, Game);
@@ -6878,7 +7030,9 @@ var G = require('./boot.js');
         return;
       }
 
-      // 世界层
+      // 世界层（苍穹视界：zoom < 1 时整层放大绘制，视野更远）
+      var wz = G.Camera.zoom || 1;
+      if (wz !== 1) ctx.setTransform(G.P.dpr * wz, 0, 0, G.P.dpr * wz, 0, 0);
       G.Bg.draw(ctx, ox, oy);
       G.Bg.drawBase(ctx, Game.base, ox, oy);
       G.Pickup.draw(ctx, ox, oy);
@@ -6911,6 +7065,9 @@ var G = require('./boot.js');
       }
       G.FX.drawTexts(ctx, ox, oy);
 
+      // UI 层（恢复未缩放变换，HUD 始终铺满屏幕）
+      ctx.setTransform(G.P.dpr, 0, 0, G.P.dpr, 0, 0);
+
       // 经验条（屏幕最底部细条）
       var xpR = Math.min(1, Game.xp / Game.xpNext);
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -6918,15 +7075,14 @@ var G = require('./boot.js');
       ctx.fillStyle = '#2ecc71';
       ctx.fillRect(0, H - 4, W * xpR, 4);
 
-      // UI 层
       G.UI.draw(ctx, Game);
-
-      // 低血量红晕
       var hpr = G.Player.hp / G.Player.maxHp;
       if (Game.state === 'playing' && hpr < 0.3) {
         ctx.fillStyle = 'rgba(255,0,0,' + (0.12 + 0.08 * Math.sin(Date.now() / 200)) + ')';
         ctx.fillRect(0, 0, W, H);
       }
+      // 主角属性面板（最顶层）
+      if (Game.statsOpen && G.UI.drawStatsPanel) G.UI.drawStatsPanel(ctx, Game);
     }
   };
 
