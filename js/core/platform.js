@@ -15,7 +15,7 @@ var G = require('../boot.js');
     P.canvas.style.position = 'fixed';
     P.canvas.style.left = '0';
     P.canvas.style.top = '0';
-    P.canvas.style.background = '#05070f';
+    P.canvas.style.background = '#0a1030';
     document.body.appendChild(P.canvas);
     P.dpr = Math.min(window.devicePixelRatio || 1, 2);
     P.screenW = window.innerWidth;

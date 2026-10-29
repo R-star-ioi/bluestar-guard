@@ -51,7 +51,7 @@ var G = require('../boot.js');
     P.canvas.style.position = 'fixed';
     P.canvas.style.left = '0';
     P.canvas.style.top = '0';
-    P.canvas.style.background = '#05070f';
+    P.canvas.style.background = '#0a1030';
     document.body.appendChild(P.canvas);
     P.dpr = Math.min(window.devicePixelRatio || 1, 2);
     P.screenW = window.innerWidth;
@@ -834,6 +834,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.32', title: '修窗口边缘黑边', lines: ['修复：窗口尺寸变化（最大化/滚动条出现/开发者工具开合）后画布右侧或底部残留黑边——画布改为每帧自检视口尺寸，变化立即重设铺满'] },
     { ver: 'v0.5.31', title: '修视距边缘不刷新', lines: ['修复：选择苍穹视界后屏幕右/下边缘出现固定色块、要拖动窗口才刷新——背景与出屏剔除改用缩放后的可视范围'] },
     { ver: 'v0.5.30', title: '图标提亮', lines: ['抽武器/背包页钻石图标也换成 💎（漏改）', '💎/🪙 图标加发光提亮：叠绘两次 + 发光描边，只提亮图标不影响背景'] },
     { ver: 'v0.5.29', title: '主界面视觉 + 领奖动画', lines: ['主界面钻石/金币图标换成 💎 / 🪙（与抽武器页一致）', '宝箱领取后钻石音效连响 + 一串钻石飞向右上角余额，到账时数字闪白'] },
@@ -895,7 +896,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.31';
+  D.VERSION = 'v0.5.32';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -7148,9 +7149,13 @@ var G = require('./boot.js');
     },
 
     render: function () {
-      if (G.P.checkViewport) G.P.checkViewport();   // 视口变化时先重设画布，防止边缘残留
+      if (G.P.checkViewport) G.P.checkViewport();   // 视口变化时先重设画布（两个数字比较，零开销）
       var ctx = G.P.ctx;
       var W = G.P.screenW, H = G.P.screenH;
+      // 每帧先整屏铺一层深空底色（未缩放坐标）：
+      // 保证任何视距缩放/画布尺寸组合下都不露出画布底色（黑边）
+      ctx.fillStyle = '#0a1030';
+      ctx.fillRect(0, 0, W, H);
       var ox, oy;
       if (Game.state === 'menu') {
         ox = 0; oy = 0;

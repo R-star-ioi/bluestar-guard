@@ -654,9 +654,13 @@ var G = require('./boot.js');
     },
 
     render: function () {
-      if (G.P.checkViewport) G.P.checkViewport();   // 视口变化时先重设画布，防止边缘残留
+      if (G.P.checkViewport) G.P.checkViewport();   // 视口变化时先重设画布（两个数字比较，零开销）
       var ctx = G.P.ctx;
       var W = G.P.screenW, H = G.P.screenH;
+      // 每帧先整屏铺一层深空底色（未缩放坐标）：
+      // 保证任何视距缩放/画布尺寸组合下都不露出画布底色（黑边）
+      ctx.fillStyle = '#0a1030';
+      ctx.fillRect(0, 0, W, H);
       var ox, oy;
       if (Game.state === 'menu') {
         ox = 0; oy = 0;
