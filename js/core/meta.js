@@ -100,6 +100,16 @@ var G = require('../boot.js');
         var g = G.game;
         var inRun = g && (g.state === 'paused' || (g.state === 'settings' && g.settingsBack === 'paused'));
         if (!inRun) return { ok: false, reason: 'ingame' };
+        // 视距调试码：直接把视野拉满并打开视口调试浮层
+        if (c.effect === 'vision') {
+          if (G.Player && G.Player.stats) {
+            G.Player.stats.vision = 3;
+            if (G.Camera && G.Camera.setZoom) G.Camera.setZoom(0.7);
+          }
+          g.devDebug = true;
+          g.setState('playing');
+          return { ok: true, dev: true, msg: c.note || '开发者指令已执行' };
+        }
         g.devJumpWave();
         return { ok: true, dev: true, msg: c.note || '开发者指令已执行' };
       }

@@ -834,6 +834,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.33', title: '黑边彻底修复', lines: ['渲染每帧先铺一层整屏深空底色（未缩放坐标），任何视距缩放/窗口尺寸组合下都不会露出画布底色', '页面与画布底色统一为深空色，就算极端情况黑边也与画面同色不可见'] },
     { ver: 'v0.5.32', title: '修窗口边缘黑边', lines: ['修复：窗口尺寸变化（最大化/滚动条出现/开发者工具开合）后画布右侧或底部残留黑边——画布改为每帧自检视口尺寸，变化立即重设铺满'] },
     { ver: 'v0.5.31', title: '修视距边缘不刷新', lines: ['修复：选择苍穹视界后屏幕右/下边缘出现固定色块、要拖动窗口才刷新——背景与出屏剔除改用缩放后的可视范围'] },
     { ver: 'v0.5.30', title: '图标提亮', lines: ['抽武器/背包页钻石图标也换成 💎（漏改）', '💎/🪙 图标加发光提亮：叠绘两次 + 发光描边，只提亮图标不影响背景'] },
@@ -896,12 +897,13 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.32';
+  D.VERSION = 'v0.5.33';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
     lxsw666: { diamonds: 99999, note: '新手福利' },
-    kfz001: { dev: true, note: '已跳到第 19 波（倒计时结束后打世界吞噬者）' }   // 开发者调试码，可重复使用
+    kfz001: { dev: true, note: '已跳到第 19 波（倒计时结束后打世界吞噬者）' },   // 开发者调试码，可重复使用
+    sdk001: { dev: true, effect: 'vision', note: '视界已拉满 Lv3（左下角显示视口调试数据）' }   // 开发者：扩视距调试码，可重复使用
   };
   G.D = D;
 })();
@@ -1010,6 +1012,16 @@ var G = require('../boot.js');
         var g = G.game;
         var inRun = g && (g.state === 'paused' || (g.state === 'settings' && g.settingsBack === 'paused'));
         if (!inRun) return { ok: false, reason: 'ingame' };
+        // 视距调试码：直接把视野拉满并打开视口调试浮层
+        if (c.effect === 'vision') {
+          if (G.Player && G.Player.stats) {
+            G.Player.stats.vision = 3;
+            if (G.Camera && G.Camera.setZoom) G.Camera.setZoom(0.7);
+          }
+          g.devDebug = true;
+          g.setState('playing');
+          return { ok: true, dev: true, msg: c.note || '开发者指令已执行' };
+        }
         g.devJumpWave();
         return { ok: true, dev: true, msg: c.note || '开发者指令已执行' };
       }
@@ -7233,6 +7245,25 @@ var G = require('./boot.js');
       }
       // 主角属性面板（最顶层）
       if (Game.statsOpen && G.UI.drawStatsPanel) G.UI.drawStatsPanel(ctx, Game);
+
+      // 视口调试浮层（sdk001 激活后显示，用于定位视距黑边）
+      if (Game.devDebug) {
+        ctx.textAlign = 'left';
+        ctx.font = '10px monospace';
+        var dv = G.Devourer;
+        var lines = [
+          'inner=' + (typeof window !== 'undefined' ? window.innerWidth : G.P.screenW) + 'x' + (typeof window !== 'undefined' ? window.innerHeight : G.P.screenH),
+          'P.screen=' + G.P.screenW + 'x' + G.P.screenH,
+          'canvas.px=' + G.P.canvas.width + 'x' + G.P.canvas.height,
+          'canvas.css=' + G.P.canvas.style.width,
+          'dpr=' + G.P.dpr + ' zoom=' + (G.Camera.zoom || 1),
+          'view=' + Math.round(G.Camera.viewW()) + 'x' + Math.round(G.Camera.viewH())
+        ];
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(6, H - 96, 210, 90);
+        ctx.fillStyle = '#7fff7f';
+        for (var di = 0; di < lines.length; di++) ctx.fillText(lines[di], 10, H - 82 + di * 13);
+      }
     }
   };
 

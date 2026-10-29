@@ -738,6 +738,25 @@ var G = require('./boot.js');
       }
       // 主角属性面板（最顶层）
       if (Game.statsOpen && G.UI.drawStatsPanel) G.UI.drawStatsPanel(ctx, Game);
+
+      // 视口调试浮层（sdk001 激活后显示，用于定位视距黑边）
+      if (Game.devDebug) {
+        ctx.textAlign = 'left';
+        ctx.font = '10px monospace';
+        var dv = G.Devourer;
+        var lines = [
+          'inner=' + (typeof window !== 'undefined' ? window.innerWidth : G.P.screenW) + 'x' + (typeof window !== 'undefined' ? window.innerHeight : G.P.screenH),
+          'P.screen=' + G.P.screenW + 'x' + G.P.screenH,
+          'canvas.px=' + G.P.canvas.width + 'x' + G.P.canvas.height,
+          'canvas.css=' + G.P.canvas.style.width,
+          'dpr=' + G.P.dpr + ' zoom=' + (G.Camera.zoom || 1),
+          'view=' + Math.round(G.Camera.viewW()) + 'x' + Math.round(G.Camera.viewH())
+        ];
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(6, H - 96, 210, 90);
+        ctx.fillStyle = '#7fff7f';
+        for (var di = 0; di < lines.length; di++) ctx.fillText(lines[di], 10, H - 82 + di * 13);
+      }
     }
   };
 
