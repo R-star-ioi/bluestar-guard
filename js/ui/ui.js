@@ -416,8 +416,8 @@ var G = require('../boot.js');
       }
 
       var pw = Math.min(352, W - 36);
-      // 128(头部) + 属性行 + 30(效果标题) + 效果行 + 78(效果区到底部提示的安全距)
-      var ph = 128 + attrs.length * 18 + 30 + fx.length * 17 + 78;
+      // 128(头部) + 属性行 + 30(效果标题) + 效果行 + 56(底部关闭提示区)
+      var ph = 128 + attrs.length * 18 + 30 + fx.length * 17 + 56;
       var px = (W - pw) / 2, py = Math.max(40, (H - ph) / 2);
 
       // ---- 绘制 ----
@@ -484,13 +484,11 @@ var G = require('../boot.js');
         ctx.fillText(fx[fi], px + 20, ay);
       }
 
-      // 底部：合成提示 + 关闭提示
-      var fy = py + ph - 40;
+      // 底部：关闭提示（面板内居中）
       ctx.font = '10px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillText('合成：3 件同阶同星 → 高一阶 · 2 件同星红 → 升一星', W / 2, fy);
+      ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillText('点击任意处关闭', W / 2, py + ph - 16);
+      ctx.fillText('点击任意处关闭', W / 2, py + ph - 14);
     },
 
     drawAnnounce: function (ctx, game, yPct) {

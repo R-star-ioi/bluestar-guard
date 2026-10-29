@@ -846,6 +846,8 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.41', title: '武器面板微调', lines: ['详情面板删除底部合成规则一行，「点击任意处关闭」改为面板内真正居中'] },
+    { ver: 'v0.5.40', title: '武器详情面板', lines: ['背包里点一下武器选中，再点一下同一件 → 弹出该武器的完整介绍', '属性（攻击/攻速/暴击/射程/装备加成）与战斗效果（穿透/冰霜/暗影/炎爆与红色星级进阶）全部实时取自装备数值', '点任意处关闭，装备/卸下仍走左下角按钮'] },
     { ver: 'v0.5.39', title: '抽卡页排版彻底重做', lines: ['修复卡池横幅文字乱飘：提示/价格两行此前被箭头按钮的居中对齐带偏，整体左漂压到卡面', '横幅高度改为内容驱动下限，矮窗口下文字不再溢出横幅、掉进规则框夹缝'] },
     { ver: 'v0.5.38', title: '修红5★炮手持过大 + 抽卡页排版', lines: ['红 5★ 炮手持再收 14%（横图额外缩放），彻底不遮挡角色', '抽卡页概率改单行（宽屏），文字行距重排，不再重叠'] },
     { ver: 'v0.5.37', title: '修炮手武器手持过大', lines: ['手持武器改为按图片长边归一化：横图（炮/枪）按宽度、竖图（弓）按高度缩放，任何形状的武器显示尺寸一致，不再盖住角色'] },
@@ -915,7 +917,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.39';
+  D.VERSION = 'v0.5.41';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -5041,8 +5043,8 @@ var G = require('../boot.js');
       }
 
       var pw = Math.min(352, W - 36);
-      // 128(头部) + 属性行 + 30(效果标题) + 效果行 + 78(效果区到底部提示的安全距)
-      var ph = 128 + attrs.length * 18 + 30 + fx.length * 17 + 78;
+      // 128(头部) + 属性行 + 30(效果标题) + 效果行 + 56(底部关闭提示区)
+      var ph = 128 + attrs.length * 18 + 30 + fx.length * 17 + 56;
       var px = (W - pw) / 2, py = Math.max(40, (H - ph) / 2);
 
       // ---- 绘制 ----
@@ -5109,13 +5111,11 @@ var G = require('../boot.js');
         ctx.fillText(fx[fi], px + 20, ay);
       }
 
-      // 底部：合成提示 + 关闭提示
-      var fy = py + ph - 40;
+      // 底部：关闭提示（面板内居中）
       ctx.font = '10px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillText('合成：3 件同阶同星 → 高一阶 · 2 件同星红 → 升一星', W / 2, fy);
+      ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillText('点击任意处关闭', W / 2, py + ph - 16);
+      ctx.fillText('点击任意处关闭', W / 2, py + ph - 14);
     },
 
     drawAnnounce: function (ctx, game, yPct) {
