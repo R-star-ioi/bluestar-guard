@@ -12,8 +12,16 @@ var G = require('../boot.js');
       Camera.y = (mapH - G.P.screenH) / 2;
     },
     setZoom: function (z) {
-      Camera.zoom = G.U.clamp(z, 0.6, 1);
+      Camera.zoom = Camera.clampZoom(z);
       Camera.clampPos();
+    },
+    // 视距下限：视野不能超出地图范围（viewW ≤ mapW），否则地图外是虚空
+    clampZoom: function (z) {
+      var minZ = 0.5;
+      if (Camera.mapW && G.P) {
+        minZ = Math.max(G.P.screenW / Camera.mapW, G.P.screenH / Camera.mapH);
+      }
+      return G.U.clamp(z, Math.max(0.5, minZ), 1);
     },
     // 视口实际覆盖的世界尺寸（随 zoom 变大）
     viewW: function () { return G.P.screenW / Camera.zoom; },
@@ -24,6 +32,9 @@ var G = require('../boot.js');
       Camera.clampPos();
     },
     update: function (dt, tx, ty) {
+      // 窗口变大后视距下限可能抬高（视野不能出地图），每帧校正
+      var minZ = Camera.clampZoom(Camera.zoom);
+      if (minZ !== Camera.zoom) { Camera.zoom = minZ; Camera.clampPos(); }
       // 平滑跟随
       var gx = tx - Camera.viewW() / 2;
       var gy = ty - Camera.viewH() / 2;

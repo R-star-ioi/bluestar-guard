@@ -424,8 +424,16 @@ var G = require('../boot.js');
       Camera.y = (mapH - G.P.screenH) / 2;
     },
     setZoom: function (z) {
-      Camera.zoom = G.U.clamp(z, 0.6, 1);
+      Camera.zoom = Camera.clampZoom(z);
       Camera.clampPos();
+    },
+    // 视距下限：视野不能超出地图范围（viewW ≤ mapW），否则地图外是虚空
+    clampZoom: function (z) {
+      var minZ = 0.5;
+      if (Camera.mapW && G.P) {
+        minZ = Math.max(G.P.screenW / Camera.mapW, G.P.screenH / Camera.mapH);
+      }
+      return G.U.clamp(z, Math.max(0.5, minZ), 1);
     },
     // 视口实际覆盖的世界尺寸（随 zoom 变大）
     viewW: function () { return G.P.screenW / Camera.zoom; },
@@ -436,6 +444,9 @@ var G = require('../boot.js');
       Camera.clampPos();
     },
     update: function (dt, tx, ty) {
+      // 窗口变大后视距下限可能抬高（视野不能出地图），每帧校正
+      var minZ = Camera.clampZoom(Camera.zoom);
+      if (minZ !== Camera.zoom) { Camera.zoom = minZ; Camera.clampPos(); }
       // 平滑跟随
       var gx = tx - Camera.viewW() / 2;
       var gy = ty - Camera.viewH() / 2;
@@ -834,6 +845,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.34', title: '视距调试工具', lines: ['新增开发者兑换码：暂停后在设置页输入，一键把视界拉满 Lv3 并打开左下角视口调试浮层（显示窗口/画布/缩放实时参数，用于定位视距黑边的真正原因）'] },
     { ver: 'v0.5.33', title: '黑边彻底修复', lines: ['渲染每帧先铺一层整屏深空底色（未缩放坐标），任何视距缩放/窗口尺寸组合下都不会露出画布底色', '页面与画布底色统一为深空色，就算极端情况黑边也与画面同色不可见'] },
     { ver: 'v0.5.32', title: '修窗口边缘黑边', lines: ['修复：窗口尺寸变化（最大化/滚动条出现/开发者工具开合）后画布右侧或底部残留黑边——画布改为每帧自检视口尺寸，变化立即重设铺满'] },
     { ver: 'v0.5.31', title: '修视距边缘不刷新', lines: ['修复：选择苍穹视界后屏幕右/下边缘出现固定色块、要拖动窗口才刷新——背景与出屏剔除改用缩放后的可视范围'] },
@@ -897,7 +909,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.33';
+  D.VERSION = 'v0.5.34';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
