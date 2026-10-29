@@ -4,7 +4,10 @@ var G = require('../boot.js');
   var U = G.U, D = G.D;
   var Bg = {
     draw: function (ctx, ox, oy) {
-      var W = G.P.screenW, H = G.P.screenH;
+      // 视距缩放（苍穹视界）下世界层整体被缩放绘制，
+      // 背景必须覆盖缩放后的可见世界范围，否则屏幕右/下边缘残留旧帧
+      var W = (G.Camera && G.Camera.viewW) ? G.Camera.viewW() : G.P.screenW;
+      var H = (G.Camera && G.Camera.viewH) ? G.Camera.viewH() : G.P.screenH;
       // 深空底色
       var grad = ctx.createLinearGradient(0, 0, 0, H);
       grad.addColorStop(0, '#0a1030');

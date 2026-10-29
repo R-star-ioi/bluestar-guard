@@ -245,6 +245,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.31', title: '修视距边缘不刷新', lines: ['修复：选择苍穹视界后屏幕右/下边缘出现固定色块、要拖动窗口才刷新——背景与出屏剔除改用缩放后的可视范围'] },
     { ver: 'v0.5.30', title: '图标提亮', lines: ['抽武器/背包页钻石图标也换成 💎（漏改）', '💎/🪙 图标加发光提亮：叠绘两次 + 发光描边，只提亮图标不影响背景'] },
     { ver: 'v0.5.29', title: '主界面视觉 + 领奖动画', lines: ['主界面钻石/金币图标换成 💎 / 🪙（与抽武器页一致）', '宝箱领取后钻石音效连响 + 一串钻石飞向右上角余额，到账时数字闪白'] },
     { ver: 'v0.5.28', title: '音效响度增强', lines: ['音效拉条的响度曲线重做：30% ≈ 原来的 100% 响度，拉满 100% = 原 270%', '加了压缩器防止大音量爆音'] },
@@ -305,7 +306,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.30';
+  D.VERSION = 'v0.5.31';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {

@@ -822,6 +822,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.30', title: '图标提亮', lines: ['抽武器/背包页钻石图标也换成 💎（漏改）', '💎/🪙 图标加发光提亮：叠绘两次 + 发光描边，只提亮图标不影响背景'] },
     { ver: 'v0.5.29', title: '主界面视觉 + 领奖动画', lines: ['主界面钻石/金币图标换成 💎 / 🪙（与抽武器页一致）', '宝箱领取后钻石音效连响 + 一串钻石飞向右上角余额，到账时数字闪白'] },
     { ver: 'v0.5.28', title: '音效响度增强', lines: ['音效拉条的响度曲线重做：30% ≈ 原来的 100% 响度，拉满 100% = 原 270%', '加了压缩器防止大音量爆音'] },
     { ver: 'v0.5.27', title: '修拉条拖不动', lines: ['设置页滑条被全屏透明按钮拦截了触摸，导致音量拉条拉不动——输入路由改为滑条优先，拖动实时生效、松手保存'] },
@@ -881,7 +882,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.29';
+  D.VERSION = 'v0.5.30';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -1743,7 +1744,10 @@ var G = require('../boot.js');
   var U = G.U, D = G.D;
   var Bg = {
     draw: function (ctx, ox, oy) {
-      var W = G.P.screenW, H = G.P.screenH;
+      // 视距缩放（苍穹视界）下世界层整体被缩放绘制，
+      // 背景必须覆盖缩放后的可见世界范围，否则屏幕右/下边缘残留旧帧
+      var W = (G.Camera && G.Camera.viewW) ? G.Camera.viewW() : G.P.screenW;
+      var H = (G.Camera && G.Camera.viewH) ? G.Camera.viewH() : G.P.screenH;
       // 深空底色
       var grad = ctx.createLinearGradient(0, 0, 0, H);
       grad.addColorStop(0, '#0a1030');
@@ -3499,7 +3503,9 @@ var G = require('../boot.js');
         var e = Enemy.list[i];
         if (e.isWorm) continue;   // 蠕虫由 Devourer.draw 绘制
         var sx = e.x - ox, sy = e.y - oy;
-        if (sx < -60 || sy < -60 || sx > G.P.screenW + 60 || sy > G.P.screenH + 60) continue;
+        var vw = (G.Camera && G.Camera.viewW) ? G.Camera.viewW() : G.P.screenW;
+        var vh = (G.Camera && G.Camera.viewH) ? G.Camera.viewH() : G.P.screenH;
+        if (sx < -60 || sy < -60 || sx > vw + 60 || sy > vh + 60) continue;
         var wob = Math.sin(e.wobT * 6) * 0.08;
 
         // 影子
@@ -3935,7 +3941,9 @@ var G = require('../boot.js');
         for (i = segs.length - 1; i >= 0; i--) {
           var s = segs[i];
           var sx = s.x - ox, sy = s.y - oy;
-          if (sx < -50 || sy < -50 || sx > G.P.screenW + 50 || sy > G.P.screenH + 50) continue;
+          var vw = (G.Camera && G.Camera.viewW) ? G.Camera.viewW() : G.P.screenW;
+          var vh = (G.Camera && G.Camera.viewH) ? G.Camera.viewH() : G.P.screenH;
+          if (sx < -50 || sy < -50 || sx > vw + 50 || sy > vh + 50) continue;
           var isHead = i === 0;
           var isTail = i === segs.length - 1;
           var flash = s.hitT > 0;

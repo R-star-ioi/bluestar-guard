@@ -294,7 +294,9 @@ var G = require('../boot.js');
         var e = Enemy.list[i];
         if (e.isWorm) continue;   // 蠕虫由 Devourer.draw 绘制
         var sx = e.x - ox, sy = e.y - oy;
-        if (sx < -60 || sy < -60 || sx > G.P.screenW + 60 || sy > G.P.screenH + 60) continue;
+        var vw = (G.Camera && G.Camera.viewW) ? G.Camera.viewW() : G.P.screenW;
+        var vh = (G.Camera && G.Camera.viewH) ? G.Camera.viewH() : G.P.screenH;
+        if (sx < -60 || sy < -60 || sx > vw + 60 || sy > vh + 60) continue;
         var wob = Math.sin(e.wobT * 6) * 0.08;
 
         // 影子

@@ -318,7 +318,9 @@ var G = require('../boot.js');
         for (i = segs.length - 1; i >= 0; i--) {
           var s = segs[i];
           var sx = s.x - ox, sy = s.y - oy;
-          if (sx < -50 || sy < -50 || sx > G.P.screenW + 50 || sy > G.P.screenH + 50) continue;
+          var vw = (G.Camera && G.Camera.viewW) ? G.Camera.viewW() : G.P.screenW;
+          var vh = (G.Camera && G.Camera.viewH) ? G.Camera.viewH() : G.P.screenH;
+          if (sx < -50 || sy < -50 || sx > vw + 50 || sy > vh + 50) continue;
           var isHead = i === 0;
           var isTail = i === segs.length - 1;
           var flash = s.hitT > 0;
