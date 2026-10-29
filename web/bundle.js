@@ -775,6 +775,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.24', title: 'DPS 与 ? 对齐', lines: ['「?」按钮与 DPS 文字同一水平线并紧贴其右，整组下移 10px'] },
     { ver: 'v0.5.23', title: '修复属性面板点不开', lines: ['「?」按钮点击无反应的 bug：按钮回调引用了未定义变量导致点击报错，已修', '「?」按钮下移 20px，吞噬者血条出现时也不会被盖住'] },
     { ver: 'v0.5.22', title: '属性面板 + 新强化 + 拉怪距离', lines: ['DPS 旁新增「?」按钮，点开查看主角全部属性（攻击/攻速/暴击/武器加成/局内强化）', '金币左侧显示当前主角等级 Lv', '升级三选一新强化：鹰眼（射程+5%×5）、苍穹视界（视野+10%×3）、震荡弹头（普攻击退，力度随等级）', '崩解爆弹对 Boss 单次伤害硬上限 15%（暴击也压不住，彻底无法秒 Boss）', '吞噬者移速回到玩家 50%，冲撞冷却 3.5s、唾液 1.6s（低血 0.75s）', '怪物仇恨距离 190 → 260，站得离基地远一点也能把怪拉过来'] },
     { ver: 'v0.5.21', title: '爆弹连锁性能优化', lines: ['修复：崩解爆弹连锁打到世界吞噬者的 72 个体节时指数级增殖，卡成幻灯片甚至死机', '体节不再作为连锁跳板；连锁爆弹并发上限 24；每帧最多引爆 2 个；同帧多爆只播一次音效/震屏'] },
@@ -828,7 +829,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.23';
+  D.VERSION = 'v0.5.24';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -4834,9 +4835,11 @@ var G = require('../boot.js');
       if (pl.stats.vision) rows.push(['苍穹视界', 'Lv ' + pl.stats.vision + '（视野 +' + pl.stats.vision * 10 + '%）']);
       if (pl.stats.knock) rows.push(['震荡弹头', 'Lv ' + pl.stats.knock]);
 
-      // 面板底
+      // 面板底（分组标题行比普通行高 10px，先算准总高防溢出）
       var pw = Math.min(320, W - 40);
-      var ph = 96 + rows.length * 24 + 34;
+      var wRows = 0;
+      for (var wi = 0; wi < rows.length; wi++) if (rows[wi][0] === 'w') wRows++;
+      var ph = 96 + (rows.length - wRows) * 24 + wRows * 34 + 34;
       var px = (W - pw) / 2, py = Math.max(70, (H - ph) / 2);
       ctx.fillStyle = 'rgba(6,10,26,0.94)';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
@@ -4858,12 +4861,12 @@ var G = require('../boot.js');
         var row = rows[i];
         if (row[0] === '-') { ry += 6; continue; }
         if (row[0] === 'w') {
-          ry += 10;
+          ry += 10;                                   // 与上一行拉开
           ctx.textAlign = 'left';
           ctx.font = 'bold 12px sans-serif';
           ctx.fillStyle = '#ffd166';
-          ctx.fillText('◆ ' + row[1], px + 20, ry + 8);
-          ry += 16;
+          ctx.fillText('◆ ' + row[1], px + 20, ry);   // 分组标题基线
+          ry += 24;                                   // 下一行与标题保持间距
           continue;
         }
         ctx.textAlign = 'left';

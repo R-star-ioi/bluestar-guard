@@ -322,9 +322,11 @@ var G = require('../boot.js');
       if (pl.stats.vision) rows.push(['苍穹视界', 'Lv ' + pl.stats.vision + '（视野 +' + pl.stats.vision * 10 + '%）']);
       if (pl.stats.knock) rows.push(['震荡弹头', 'Lv ' + pl.stats.knock]);
 
-      // 面板底
+      // 面板底（分组标题行比普通行高 10px，先算准总高防溢出）
       var pw = Math.min(320, W - 40);
-      var ph = 96 + rows.length * 24 + 34;
+      var wRows = 0;
+      for (var wi = 0; wi < rows.length; wi++) if (rows[wi][0] === 'w') wRows++;
+      var ph = 96 + (rows.length - wRows) * 24 + wRows * 34 + 34;
       var px = (W - pw) / 2, py = Math.max(70, (H - ph) / 2);
       ctx.fillStyle = 'rgba(6,10,26,0.94)';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
@@ -346,12 +348,12 @@ var G = require('../boot.js');
         var row = rows[i];
         if (row[0] === '-') { ry += 6; continue; }
         if (row[0] === 'w') {
-          ry += 10;
+          ry += 10;                                   // 与上一行拉开
           ctx.textAlign = 'left';
           ctx.font = 'bold 12px sans-serif';
           ctx.fillStyle = '#ffd166';
-          ctx.fillText('◆ ' + row[1], px + 20, ry + 8);
-          ry += 16;
+          ctx.fillText('◆ ' + row[1], px + 20, ry);   // 分组标题基线
+          ry += 24;                                   // 下一行与标题保持间距
           continue;
         }
         ctx.textAlign = 'left';
