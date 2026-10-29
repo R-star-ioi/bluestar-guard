@@ -822,6 +822,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.29', title: '主界面视觉 + 领奖动画', lines: ['主界面钻石/金币图标换成 💎 / 🪙（与抽武器页一致）', '宝箱领取后钻石音效连响 + 一串钻石飞向右上角余额，到账时数字闪白'] },
     { ver: 'v0.5.28', title: '音效响度增强', lines: ['音效拉条的响度曲线重做：30% ≈ 原来的 100% 响度，拉满 100% = 原 270%', '加了压缩器防止大音量爆音'] },
     { ver: 'v0.5.27', title: '修拉条拖不动', lines: ['设置页滑条被全屏透明按钮拦截了触摸，导致音量拉条拉不动——输入路由改为滑条优先，拖动实时生效、松手保存'] },
     { ver: 'v0.5.26', title: '音量控制 + 面板冲突修复', lines: ['设置页新增「音效大小」「音乐大小」两条拉条，实时生效并保存', '修复：属性面板打开时突然升级，属性面板会和强化选择界面叠在一起——现在进任何其他界面都会自动关掉属性面板'] },
@@ -880,7 +881,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.28';
+  D.VERSION = 'v0.5.29';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -5225,16 +5226,13 @@ var G = require('../boot.js');
       // 右上角资源栏（钻石 / 升级金币）
       var rrx = W - 158, rry = 16;
       UI.pill(ctx, rrx, rry, 74, 26, 'rgba(0,0,0,0.45)', 13);
-      ctx.font = '13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('💎', rrx + 14, rry + 18);
+      UI.drawEmojiIcon(ctx, '💎', rrx + 14, rry + 18, 13, 'rgba(150,230,255,0.95)');
       ctx.font = 'bold 12px sans-serif';
       var bump = game.diamondBump && (Date.now() - game.diamondBump < 400);
       ctx.fillStyle = bump ? '#fff' : '#7ef9ff';
       ctx.fillText(String(G.Meta.diamonds), rrx + 42, rry + 18);
       UI.pill(ctx, rrx + 78, rry, 74, 26, 'rgba(0,0,0,0.45)', 13);
-      ctx.font = '14px sans-serif';
-      ctx.fillText('🪙', rrx + 92, rry + 18);
+      UI.drawEmojiIcon(ctx, '🪙', rrx + 92, rry + 18, 14, 'rgba(255,220,130,0.9)');
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#ffd166';
       ctx.fillText(String(G.Meta.gold), rrx + 120, rry + 18);
@@ -5680,7 +5678,7 @@ var G = require('../boot.js');
         game.setState(game.weaponBack || 'menu');
       });
       UI.pill(ctx, W - 128, 16, 116, 30, 'rgba(0,0,0,0.45)', 15);
-      UI.drawDiamond(ctx, W - 112, 31, 8);
+      UI.drawEmojiIcon(ctx, '💎', W - 112, 36, 14, 'rgba(150,230,255,0.95)');
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#7ef9ff';
       ctx.textAlign = 'center';
@@ -5818,7 +5816,7 @@ var G = require('../boot.js');
         game.setState('menu');
       });
       UI.pill(ctx, W - 128, 16, 116, 30, 'rgba(0,0,0,0.45)', 15);
-      UI.drawDiamond(ctx, W - 112, 31, 8);
+      UI.drawEmojiIcon(ctx, '💎', W - 112, 36, 14, 'rgba(150,230,255,0.95)');
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#7ef9ff';
       ctx.textAlign = 'center';
@@ -6134,6 +6132,18 @@ var G = require('../boot.js');
       ctx.closePath();
       ctx.fill();
     },
+    // 发光 emoji 图标：叠绘两次 + 发光描边，解决彩字 emoji 偏暗的问题
+    drawEmojiIcon: function (ctx, ch, x, y, size, glow) {
+      ctx.save();
+      ctx.font = size + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = glow || 'rgba(255,255,255,0.8)';
+      ctx.shadowBlur = 9;
+      ctx.fillText(ch, x, y);
+      ctx.fillText(ch, x, y);
+      ctx.restore();
+    },
+
     drawCoin: function (ctx, x, y, r) {
       ctx.fillStyle = '#ffd700';
       ctx.beginPath();
