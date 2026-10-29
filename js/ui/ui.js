@@ -1704,6 +1704,30 @@ var G = require('../boot.js');
       if (!s) return;
       UI.setFx((x - s.x) / s.w);
     },
+    // 统一滑条拖动：tid = fx | sfx | bgm
+    setSliderFromX: function (tid, x) {
+      var s = UI._sliders && UI._sliders[tid];
+      if (!s) return;
+      var v = Math.max(0, Math.min(1, (x - s.x) / s.w));
+      if (tid === 'sfx') {
+        G.Meta.sfxVol = v;
+        if (G.Audio.setVolume) G.Audio.setVolume(v);
+      } else if (tid === 'bgm') {
+        G.Meta.bgmVol = v;
+        if (G.P.setBgmVolume) G.P.setBgmVolume(v);
+      } else {
+        UI.setFx(v);
+      }
+    },
+    // 命中测试：返回被拖动的滑条 tid（无则 null）
+    sliderHit: function (x, y) {
+      if (!UI._sliders) return null;
+      for (var k in UI._sliders) {
+        var s = UI._sliders[k];
+        if (x >= s.x - 16 && x <= s.x + s.w + 16 && y >= s.y - 14 && y <= s.y + s.h + 14) return k;
+      }
+      return null;
+    },
 
     drawSettings: function (ctx, game) {
       var W = G.P.screenW, H = G.P.screenH;
@@ -1720,7 +1744,7 @@ var G = require('../boot.js');
       ctx.fillText('拖动滑块调整；越低越安静，越高越炸裂', W / 2, H * 0.16 + 24);
 
       var pw = Math.min(330, W - 40), px = (W - pw) / 2;
-      var py = H * 0.26, ph = 272;
+      var py = H * 0.22, ph = 440;
       ctx.fillStyle = 'rgba(20,28,60,0.92)';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
       else ctx.fillRect(px, py, pw, ph);
@@ -1728,57 +1752,57 @@ var G = require('../boot.js');
       ctx.lineWidth = 1.5;
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.stroke(); }
 
-      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
-      ctx.textAlign = 'left';
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = '#cfe3ff';
-      ctx.fillText('特效强度', px + 24, py + 34);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#7ef9ff';
-      ctx.fillText(Math.round(v * 100) + '%', px + pw - 24, py + 34);
+      // 三条音量滑条：特效 / 音效 / 音乐
+      var mfx = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      var msfx = (G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1;
+      var mbgm = (G.Meta && typeof G.Meta.bgmVol === 'number') ? G.Meta.bgmVol : 1;
+      UI._sliders = {};
+      var sliders = [
+        { tid: 'fx', label: '特效强度', v: mfx, c1: '#3b6ea5', c2: '#7ef9ff' },
+        { tid: 'sfx', label: '音效大小', v: msfx, c1: '#7a5ba5', c2: '#c9a3ff' },
+        { tid: 'bgm', label: '音乐大小', v: mbgm, c1: '#a5763b', c2: '#ffd97e' }
+      ];
+      var tx = px + 24, tw = pw - 48;
+      var sy = py + 34;
+      for (var si = 0; si < sliders.length; si++) {
+        (function (sl) {
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.fillStyle = '#cfe3ff';
+          ctx.fillText(sl.label, tx, sy);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#7ef9ff';
+          ctx.fillText(Math.round(sl.v * 100) + '%', tx + tw, sy);
 
-      // 滑轨 + 旋钮
-      var tx = px + 24, tw = pw - 48, ty = py + 68, th = 10;
-      UI.pill(ctx, tx, ty, tw, th, 'rgba(0,0,0,0.5)', 5);
-      var fw = Math.max(3, tw * v);
-      var grad2 = ctx.createLinearGradient(tx, 0, tx + tw, 0);
-      grad2.addColorStop(0, '#3b6ea5');
-      grad2.addColorStop(1, '#7ef9ff');
-      ctx.fillStyle = grad2;
-      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(tx, ty, fw, th, 5); ctx.fill(); }
-      else ctx.fillRect(tx, ty, fw, th);
-      var kx = tx + tw * v;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#7ef9ff';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.stroke();
-      UI._slider = { x: tx, y: ty, w: tw, h: th };
-
+          var ty = sy + 12, th = 10;
+          UI.pill(ctx, tx, ty, tw, th, 'rgba(0,0,0,0.5)', 5);
+          var fw = Math.max(3, tw * sl.v);
+          var grad = ctx.createLinearGradient(tx, 0, tx + tw, 0);
+          grad.addColorStop(0, sl.c1);
+          grad.addColorStop(1, sl.c2);
+          ctx.fillStyle = grad;
+          if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(tx, ty, fw, th, 5); ctx.fill(); }
+          else ctx.fillRect(tx, ty, fw, th);
+          var kx = tx + tw * sl.v;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = sl.c2;
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.stroke();
+          UI._sliders[sl.tid] = { x: tx, y: ty, w: tw, h: th };
+          sy += 62;
+        })(sliders[si]);
+      }
+      sy += 2;
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.textAlign = 'left';
-      ctx.fillText('0% 关', tx, ty + 32);
+      ctx.fillText('0% 关', tx, sy);
       ctx.textAlign = 'right';
-      ctx.fillText('100% 满', tx + tw, ty + 32);
-
-      // 快捷档位
-      var presets = [['关', 0], ['弱', 0.35], ['中', 0.65], ['满', 1]];
-      var bw = (pw - 48 - 24) / 4;
-      for (var i = 0; i < presets.length; i++) {
-        (function (val, label, idx) {
-          var on = Math.abs(v - val) < 0.03;
-          UI.button(ctx, 'fxp_' + idx, px + 24 + idx * (bw + 8), py + 116, bw, 34, label, null,
-            on ? '#2d6cdf' : 'rgba(90,100,140,1)', function () {
-              UI.setFx(val);
-              G.Meta.save();
-              G.Audio.play('button');
-            });
-        })(presets[i][1], presets[i][0], i);
-      }
+      ctx.fillText('100% 满', tx + tw, sy);
 
       // 兑换码
-      var redY = py + 180;
+      var redY = py + 250;
       ctx.textAlign = 'left';
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#cfe3ff';

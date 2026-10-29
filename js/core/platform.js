@@ -211,20 +211,22 @@ var G = require('../boot.js');
   };
 
   // ---- 背景音乐（真实音频文件；与 audio.js 的合成音效互不影响）----
-  var bgm = null;
+  var bgm = null, bgmBase = 0.6;   // bgmBase：Boss 自带基准；实际音量 = bgmBase × Meta.bgmVol
   P.playBgm = function (src, vol) {
     P.stopBgm();
     try {
+      bgmBase = vol || 0.6;
+      var userV = (G.Meta && typeof G.Meta.bgmVol === 'number') ? G.Meta.bgmVol : 1;
       if (P.isWx) {
         bgm = wx.createInnerAudioContext();
         bgm.src = src;
         bgm.loop = true;
-        bgm.volume = vol || 0.6;
+        bgm.volume = bgmBase * userV;
         bgm.play();
       } else if (typeof Audio !== 'undefined') {
         bgm = new Audio(encodeURI(src));
         bgm.loop = true;
-        bgm.volume = vol || 0.6;
+        bgm.volume = bgmBase * userV;
         var pr = bgm.play();
         if (pr && pr.catch) pr.catch(function () { });   // 自动播放策略：失败则等下一次交互
       }
@@ -238,6 +240,12 @@ var G = require('../boot.js');
       if (bgm.src && bgm.removeAttribute) bgm.removeAttribute('src');
     } catch (e) { }
     bgm = null;
+  };
+  // 设置里拖动「音乐大小」时实时调（保持 Boss 自带基准）
+  P.setBgmVolume = function (userV) {
+    if (bgm && bgm.volume !== undefined) {
+      try { bgm.volume = bgmBase * userV; } catch (e) { }
+    }
   };
   P.bgmAlive = function () { return !!bgm; };
 

@@ -33,6 +33,8 @@ var G = require('../boot.js');
     selected: 'archer',
     diamonds: 0,                      // 钻石（通关宝箱奖励）
     fx: 1,                            // 特效强度 0~1（粒子/光圈/震屏，设置里可调）
+    sfxVol: 1,                        // 音效大小 0~1（设置里可调）
+    bgmVol: 1,                        // 音乐大小 0~1（设置里可调，吞噬者 BGM 会再乘其自带基准）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
     // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
@@ -52,6 +54,8 @@ var G = require('../boot.js');
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
         Meta.diamonds = m.diamonds || 0;
         Meta.fx = (typeof m.fx === 'number' && isFinite(m.fx)) ? Math.max(0, Math.min(1, m.fx)) : 1;
+        Meta.sfxVol = (typeof m.sfxVol === 'number' && isFinite(m.sfxVol)) ? Math.max(0, Math.min(1, m.sfxVol)) : 1;
+        Meta.bgmVol = (typeof m.bgmVol === 'number' && isFinite(m.bgmVol)) ? Math.max(0, Math.min(1, m.bgmVol)) : 1;
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
         Meta.chests = normalizeChests(m.chests);
@@ -72,7 +76,7 @@ var G = require('../boot.js');
         gold: Meta.gold, unlocked: Meta.unlocked,
         levels: Meta.levels, selected: Meta.selected,
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
-        fx: Meta.fx,
+        fx: Meta.fx, sfxVol: Meta.sfxVol, bgmVol: Meta.bgmVol,
         weapons: Meta.weapons, equip: Meta.equip, nextWuid: Meta.nextWuid,
         redeemed: Meta.redeemed,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests

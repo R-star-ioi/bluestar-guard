@@ -247,20 +247,22 @@ var G = require('../boot.js');
   };
 
   // ---- 背景音乐（真实音频文件；与 audio.js 的合成音效互不影响）----
-  var bgm = null;
+  var bgm = null, bgmBase = 0.6;   // bgmBase：Boss 自带基准；实际音量 = bgmBase × Meta.bgmVol
   P.playBgm = function (src, vol) {
     P.stopBgm();
     try {
+      bgmBase = vol || 0.6;
+      var userV = (G.Meta && typeof G.Meta.bgmVol === 'number') ? G.Meta.bgmVol : 1;
       if (P.isWx) {
         bgm = wx.createInnerAudioContext();
         bgm.src = src;
         bgm.loop = true;
-        bgm.volume = vol || 0.6;
+        bgm.volume = bgmBase * userV;
         bgm.play();
       } else if (typeof Audio !== 'undefined') {
         bgm = new Audio(encodeURI(src));
         bgm.loop = true;
-        bgm.volume = vol || 0.6;
+        bgm.volume = bgmBase * userV;
         var pr = bgm.play();
         if (pr && pr.catch) pr.catch(function () { });   // 自动播放策略：失败则等下一次交互
       }
@@ -274,6 +276,12 @@ var G = require('../boot.js');
       if (bgm.src && bgm.removeAttribute) bgm.removeAttribute('src');
     } catch (e) { }
     bgm = null;
+  };
+  // 设置里拖动「音乐大小」时实时调（保持 Boss 自带基准）
+  P.setBgmVolume = function (userV) {
+    if (bgm && bgm.volume !== undefined) {
+      try { bgm.volume = bgmBase * userV; } catch (e) { }
+    }
   };
   P.bgmAlive = function () { return !!bgm; };
 
@@ -442,7 +450,19 @@ var G = require('../boot.js');
           : (window.AudioContext || window.webkitAudioContext);
         if (!AC) { Audio.enabled = false; return; }
         Audio.ctx = new AC();
+        // 主音量节点：设置里的「音效大小」控制这里
+        try {
+          Audio.master = Audio.ctx.createGain();
+          Audio.master.gain.value = (G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1;
+          Audio.master.connect(Audio.ctx.destination);
+        } catch (e) { Audio.master = null; }
       } catch (e) { Audio.enabled = false; }
+    },
+    // 设置里拖动「音效大小」时实时调
+    setVolume: function (v) {
+      if (Audio.master && Audio.ctx) {
+        try { Audio.master.gain.value = Math.max(0, Math.min(1, v)); } catch (e) { }
+      }
     },
     resume: function () {
       Audio.ensure();
@@ -463,7 +483,7 @@ var G = require('../boot.js');
         if (freqEnd && freqEnd !== freq) o.frequency.exponentialRampToValueAtTime(Math.max(1, freqEnd), t0 + dur);
         g.gain.setValueAtTime(vol, t0);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        o.connect(g); g.connect(c.destination);
+        o.connect(g); g.connect(Audio.master || c.destination);
         o.start(t0); o.stop(t0 + dur + 0.02);
       } catch (e) { }
     },
@@ -480,7 +500,7 @@ var G = require('../boot.js');
         var src = c.createBufferSource(); src.buffer = buf;
         var g = c.createGain(); g.gain.setValueAtTime(vol, t0);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        src.connect(g); g.connect(c.destination);
+        src.connect(g); g.connect(Audio.master || c.destination);
         src.start(t0);
       } catch (e) { }
     },
@@ -775,6 +795,8 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.26', title: '音量控制 + 面板冲突修复', lines: ['设置页新增「音效大小」「音乐大小」两条拉条，实时生效并保存', '修复：属性面板打开时突然升级，属性面板会和强化选择界面叠在一起——现在进任何其他界面都会自动关掉属性面板'] },
+    { ver: 'v0.5.25', title: '属性面板排版修复', lines: ['分组标题（武器加成/局内强化）与内容行重叠的问题，间距重排'] },
     { ver: 'v0.5.24', title: 'DPS 与 ? 对齐', lines: ['「?」按钮与 DPS 文字同一水平线并紧贴其右，整组下移 10px'] },
     { ver: 'v0.5.23', title: '修复属性面板点不开', lines: ['「?」按钮点击无反应的 bug：按钮回调引用了未定义变量导致点击报错，已修', '「?」按钮下移 20px，吞噬者血条出现时也不会被盖住'] },
     { ver: 'v0.5.22', title: '属性面板 + 新强化 + 拉怪距离', lines: ['DPS 旁新增「?」按钮，点开查看主角全部属性（攻击/攻速/暴击/武器加成/局内强化）', '金币左侧显示当前主角等级 Lv', '升级三选一新强化：鹰眼（射程+5%×5）、苍穹视界（视野+10%×3）、震荡弹头（普攻击退，力度随等级）', '崩解爆弹对 Boss 单次伤害硬上限 15%（暴击也压不住，彻底无法秒 Boss）', '吞噬者移速回到玩家 50%，冲撞冷却 3.5s、唾液 1.6s（低血 0.75s）', '怪物仇恨距离 190 → 260，站得离基地远一点也能把怪拉过来'] },
@@ -829,7 +851,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.24';
+  D.VERSION = 'v0.5.26';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -876,6 +898,8 @@ var G = require('../boot.js');
     selected: 'archer',
     diamonds: 0,                      // 钻石（通关宝箱奖励）
     fx: 1,                            // 特效强度 0~1（粒子/光圈/震屏，设置里可调）
+    sfxVol: 1,                        // 音效大小 0~1（设置里可调）
+    bgmVol: 1,                        // 音乐大小 0~1（设置里可调，吞噬者 BGM 会再乘其自带基准）
     maxLevel: 1,                      // 最高已解锁关卡
     selectedLevel: 1,                 // 当前选中关卡
     // 每关独立的宝箱记录：{ '关卡号': { boxes:[bool×3], claimed:[bool×3] } }
@@ -895,6 +919,8 @@ var G = require('../boot.js');
         Meta.selected = (m.selected && Meta.unlocked[m.selected]) ? m.selected : 'archer';
         Meta.diamonds = m.diamonds || 0;
         Meta.fx = (typeof m.fx === 'number' && isFinite(m.fx)) ? Math.max(0, Math.min(1, m.fx)) : 1;
+        Meta.sfxVol = (typeof m.sfxVol === 'number' && isFinite(m.sfxVol)) ? Math.max(0, Math.min(1, m.sfxVol)) : 1;
+        Meta.bgmVol = (typeof m.bgmVol === 'number' && isFinite(m.bgmVol)) ? Math.max(0, Math.min(1, m.bgmVol)) : 1;
         Meta.maxLevel = m.maxLevel || 1;
         Meta.selectedLevel = m.selectedLevel || 1;
         Meta.chests = normalizeChests(m.chests);
@@ -915,7 +941,7 @@ var G = require('../boot.js');
         gold: Meta.gold, unlocked: Meta.unlocked,
         levels: Meta.levels, selected: Meta.selected,
         diamonds: Meta.diamonds, maxLevel: Meta.maxLevel,
-        fx: Meta.fx,
+        fx: Meta.fx, sfxVol: Meta.sfxVol, bgmVol: Meta.bgmVol,
         weapons: Meta.weapons, equip: Meta.equip, nextWuid: Meta.nextWuid,
         redeemed: Meta.redeemed,
         selectedLevel: Meta.selectedLevel, chests: Meta.chests
@@ -6217,6 +6243,30 @@ var G = require('../boot.js');
       if (!s) return;
       UI.setFx((x - s.x) / s.w);
     },
+    // 统一滑条拖动：tid = fx | sfx | bgm
+    setSliderFromX: function (tid, x) {
+      var s = UI._sliders && UI._sliders[tid];
+      if (!s) return;
+      var v = Math.max(0, Math.min(1, (x - s.x) / s.w));
+      if (tid === 'sfx') {
+        G.Meta.sfxVol = v;
+        if (G.Audio.setVolume) G.Audio.setVolume(v);
+      } else if (tid === 'bgm') {
+        G.Meta.bgmVol = v;
+        if (G.P.setBgmVolume) G.P.setBgmVolume(v);
+      } else {
+        UI.setFx(v);
+      }
+    },
+    // 命中测试：返回被拖动的滑条 tid（无则 null）
+    sliderHit: function (x, y) {
+      if (!UI._sliders) return null;
+      for (var k in UI._sliders) {
+        var s = UI._sliders[k];
+        if (x >= s.x - 16 && x <= s.x + s.w + 16 && y >= s.y - 14 && y <= s.y + s.h + 14) return k;
+      }
+      return null;
+    },
 
     drawSettings: function (ctx, game) {
       var W = G.P.screenW, H = G.P.screenH;
@@ -6233,7 +6283,7 @@ var G = require('../boot.js');
       ctx.fillText('拖动滑块调整；越低越安静，越高越炸裂', W / 2, H * 0.16 + 24);
 
       var pw = Math.min(330, W - 40), px = (W - pw) / 2;
-      var py = H * 0.26, ph = 272;
+      var py = H * 0.22, ph = 440;
       ctx.fillStyle = 'rgba(20,28,60,0.92)';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fill(); }
       else ctx.fillRect(px, py, pw, ph);
@@ -6241,57 +6291,57 @@ var G = require('../boot.js');
       ctx.lineWidth = 1.5;
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.stroke(); }
 
-      var v = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
-      ctx.textAlign = 'left';
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = '#cfe3ff';
-      ctx.fillText('特效强度', px + 24, py + 34);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#7ef9ff';
-      ctx.fillText(Math.round(v * 100) + '%', px + pw - 24, py + 34);
+      // 三条音量滑条：特效 / 音效 / 音乐
+      var mfx = (G.Meta && typeof G.Meta.fx === 'number') ? G.Meta.fx : 1;
+      var msfx = (G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1;
+      var mbgm = (G.Meta && typeof G.Meta.bgmVol === 'number') ? G.Meta.bgmVol : 1;
+      UI._sliders = {};
+      var sliders = [
+        { tid: 'fx', label: '特效强度', v: mfx, c1: '#3b6ea5', c2: '#7ef9ff' },
+        { tid: 'sfx', label: '音效大小', v: msfx, c1: '#7a5ba5', c2: '#c9a3ff' },
+        { tid: 'bgm', label: '音乐大小', v: mbgm, c1: '#a5763b', c2: '#ffd97e' }
+      ];
+      var tx = px + 24, tw = pw - 48;
+      var sy = py + 34;
+      for (var si = 0; si < sliders.length; si++) {
+        (function (sl) {
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.fillStyle = '#cfe3ff';
+          ctx.fillText(sl.label, tx, sy);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#7ef9ff';
+          ctx.fillText(Math.round(sl.v * 100) + '%', tx + tw, sy);
 
-      // 滑轨 + 旋钮
-      var tx = px + 24, tw = pw - 48, ty = py + 68, th = 10;
-      UI.pill(ctx, tx, ty, tw, th, 'rgba(0,0,0,0.5)', 5);
-      var fw = Math.max(3, tw * v);
-      var grad2 = ctx.createLinearGradient(tx, 0, tx + tw, 0);
-      grad2.addColorStop(0, '#3b6ea5');
-      grad2.addColorStop(1, '#7ef9ff');
-      ctx.fillStyle = grad2;
-      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(tx, ty, fw, th, 5); ctx.fill(); }
-      else ctx.fillRect(tx, ty, fw, th);
-      var kx = tx + tw * v;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#7ef9ff';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.stroke();
-      UI._slider = { x: tx, y: ty, w: tw, h: th };
-
+          var ty = sy + 12, th = 10;
+          UI.pill(ctx, tx, ty, tw, th, 'rgba(0,0,0,0.5)', 5);
+          var fw = Math.max(3, tw * sl.v);
+          var grad = ctx.createLinearGradient(tx, 0, tx + tw, 0);
+          grad.addColorStop(0, sl.c1);
+          grad.addColorStop(1, sl.c2);
+          ctx.fillStyle = grad;
+          if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(tx, ty, fw, th, 5); ctx.fill(); }
+          else ctx.fillRect(tx, ty, fw, th);
+          var kx = tx + tw * sl.v;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = sl.c2;
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(kx, ty + th / 2, 11, 0, Math.PI * 2); ctx.stroke();
+          UI._sliders[sl.tid] = { x: tx, y: ty, w: tw, h: th };
+          sy += 62;
+        })(sliders[si]);
+      }
+      sy += 2;
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.textAlign = 'left';
-      ctx.fillText('0% 关', tx, ty + 32);
+      ctx.fillText('0% 关', tx, sy);
       ctx.textAlign = 'right';
-      ctx.fillText('100% 满', tx + tw, ty + 32);
-
-      // 快捷档位
-      var presets = [['关', 0], ['弱', 0.35], ['中', 0.65], ['满', 1]];
-      var bw = (pw - 48 - 24) / 4;
-      for (var i = 0; i < presets.length; i++) {
-        (function (val, label, idx) {
-          var on = Math.abs(v - val) < 0.03;
-          UI.button(ctx, 'fxp_' + idx, px + 24 + idx * (bw + 8), py + 116, bw, 34, label, null,
-            on ? '#2d6cdf' : 'rgba(90,100,140,1)', function () {
-              UI.setFx(val);
-              G.Meta.save();
-              G.Audio.play('button');
-            });
-        })(presets[i][1], presets[i][0], i);
-      }
+      ctx.fillText('100% 满', tx + tw, sy);
 
       // 兑换码
-      var redY = py + 180;
+      var redY = py + 250;
       ctx.textAlign = 'left';
       ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#cfe3ff';
@@ -6424,6 +6474,7 @@ var G = require('./boot.js');
       if (s === 'heroes') { Game.heroScroll = 0; Game.heroDrag = null; }
       if (s !== 'playing') {
         Game.panelHero = null;
+        Game.statsOpen = false;   // 离开战斗界面时关掉属性面板，避免与其他弹层冲突
         if (s !== 'levelup') { G.Input.joyReset(); Game.joyId = null; }
       }
     },
@@ -6833,10 +6884,10 @@ var G = require('./boot.js');
     onWorldTouch: function (id, x, y) {
       // 设置页：只有滑块区域由这里接管（按钮在 Input 层已被拦截）
       if (Game.state === 'settings') {
-        var sr = G.UI && G.UI.sliderRect ? G.UI.sliderRect() : null;
-        if (sr && x >= sr.x - 16 && x <= sr.x + sr.w + 16 && y >= sr.y - 26 && y <= sr.y + sr.h + 26) {
-          Game.sliderDrag = { id: id };
-          G.UI.setFxFromX(x);
+        var tid = G.UI && G.UI.sliderHit ? G.UI.sliderHit(x, y) : null;
+        if (tid) {
+          Game.sliderDrag = { id: id, tid: tid };
+          G.UI.setSliderFromX(tid, x);
         }
         return;
       }
@@ -6886,7 +6937,7 @@ var G = require('./boot.js');
     onWorldMove: function (id, x, y) {
       // 设置页：拖动滑块
       if (Game.state === 'settings') {
-        if (Game.sliderDrag && Game.sliderDrag.id === id) G.UI.setFxFromX(x);
+        if (Game.sliderDrag && Game.sliderDrag.id === id) G.UI.setSliderFromX(Game.sliderDrag.tid, x);
         return;
       }
       // 英雄页：上下拖动滚动列表（上限在绘制时按内容高度夹紧）

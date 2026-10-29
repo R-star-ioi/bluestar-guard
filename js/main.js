@@ -60,6 +60,7 @@ var G = require('./boot.js');
       if (s === 'heroes') { Game.heroScroll = 0; Game.heroDrag = null; }
       if (s !== 'playing') {
         Game.panelHero = null;
+        Game.statsOpen = false;   // 离开战斗界面时关掉属性面板，避免与其他弹层冲突
         if (s !== 'levelup') { G.Input.joyReset(); Game.joyId = null; }
       }
     },
@@ -469,10 +470,10 @@ var G = require('./boot.js');
     onWorldTouch: function (id, x, y) {
       // 设置页：只有滑块区域由这里接管（按钮在 Input 层已被拦截）
       if (Game.state === 'settings') {
-        var sr = G.UI && G.UI.sliderRect ? G.UI.sliderRect() : null;
-        if (sr && x >= sr.x - 16 && x <= sr.x + sr.w + 16 && y >= sr.y - 26 && y <= sr.y + sr.h + 26) {
-          Game.sliderDrag = { id: id };
-          G.UI.setFxFromX(x);
+        var tid = G.UI && G.UI.sliderHit ? G.UI.sliderHit(x, y) : null;
+        if (tid) {
+          Game.sliderDrag = { id: id, tid: tid };
+          G.UI.setSliderFromX(tid, x);
         }
         return;
       }
@@ -522,7 +523,7 @@ var G = require('./boot.js');
     onWorldMove: function (id, x, y) {
       // 设置页：拖动滑块
       if (Game.state === 'settings') {
-        if (Game.sliderDrag && Game.sliderDrag.id === id) G.UI.setFxFromX(x);
+        if (Game.sliderDrag && Game.sliderDrag.id === id) G.UI.setSliderFromX(Game.sliderDrag.tid, x);
         return;
       }
       // 英雄页：上下拖动滚动列表（上限在绘制时按内容高度夹紧）

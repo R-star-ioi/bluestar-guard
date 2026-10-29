@@ -11,7 +11,19 @@ var G = require('../boot.js');
           : (window.AudioContext || window.webkitAudioContext);
         if (!AC) { Audio.enabled = false; return; }
         Audio.ctx = new AC();
+        // 主音量节点：设置里的「音效大小」控制这里
+        try {
+          Audio.master = Audio.ctx.createGain();
+          Audio.master.gain.value = (G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1;
+          Audio.master.connect(Audio.ctx.destination);
+        } catch (e) { Audio.master = null; }
       } catch (e) { Audio.enabled = false; }
+    },
+    // 设置里拖动「音效大小」时实时调
+    setVolume: function (v) {
+      if (Audio.master && Audio.ctx) {
+        try { Audio.master.gain.value = Math.max(0, Math.min(1, v)); } catch (e) { }
+      }
     },
     resume: function () {
       Audio.ensure();
@@ -32,7 +44,7 @@ var G = require('../boot.js');
         if (freqEnd && freqEnd !== freq) o.frequency.exponentialRampToValueAtTime(Math.max(1, freqEnd), t0 + dur);
         g.gain.setValueAtTime(vol, t0);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        o.connect(g); g.connect(c.destination);
+        o.connect(g); g.connect(Audio.master || c.destination);
         o.start(t0); o.stop(t0 + dur + 0.02);
       } catch (e) { }
     },
@@ -49,7 +61,7 @@ var G = require('../boot.js');
         var src = c.createBufferSource(); src.buffer = buf;
         var g = c.createGain(); g.gain.setValueAtTime(vol, t0);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        src.connect(g); g.connect(c.destination);
+        src.connect(g); g.connect(Audio.master || c.destination);
         src.start(t0);
       } catch (e) { }
     },
