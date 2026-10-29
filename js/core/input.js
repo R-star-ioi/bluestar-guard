@@ -9,6 +9,16 @@ var G = require('../boot.js');
         var game = G.game;
         if (!game) return;
         if (type === 'start') {
+          // 设置页：音量滑条优先于普通按钮（滑条区域被全屏 set_block 按钮盖住，走不了按钮路由）
+          if (game.state === 'settings' && G.UI && G.UI.sliderHit) {
+            var tid = G.UI.sliderHit(x, y);
+            if (tid) {
+              Input.uiTouches[id] = 'slider:' + tid;
+              if (!game.sliderDrag) game.sliderDrag = { id: id, tid: tid };
+              G.UI.setSliderFromX(tid, x);
+              return;
+            }
+          }
           var btn = G.UI ? G.UI.hitTest(x, y) : null;
           if (btn && btn.onTap) {
             Input.uiTouches[id] = btn.id;
@@ -17,11 +27,24 @@ var G = require('../boot.js');
           }
           game.onWorldTouch(id, x, y);
         } else if (type === 'move') {
-          if (Input.uiTouches[id] !== undefined) return;
+          var t = Input.uiTouches[id];
+          if (t !== undefined) {
+            // 设置页滑条：按住滑动实时调整音量
+            if (typeof t === 'string' && t.indexOf('slider:') === 0 &&
+                game.sliderDrag && game.sliderDrag.id === id && game.sliderDrag.tid === t.slice(7)) {
+              G.UI.setSliderFromX(game.sliderDrag.tid, x);
+            }
+            return;
+          }
           game.onWorldMove(id, x, y);
         } else {
           if (Input.uiTouches[id] !== undefined) {
             delete Input.uiTouches[id];
+            // 设置页滑条：松手落盘
+            if (game.state === 'settings' && game.sliderDrag) {
+              game.sliderDrag = null;
+              if (G.Meta) G.Meta.save();
+            }
             return;
           }
           game.onWorldEnd(id, x, y);
