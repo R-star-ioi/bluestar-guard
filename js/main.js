@@ -23,6 +23,8 @@ var G = require('./boot.js');
     currentLevel: 1,
     victory: null,
     weaponCls: null,     // 武器页当前职业（null = 背包看全部）
+    gachaPool: 'archer', // 抽卡当前池子（archer / cannon）
+    bagFilter: 'all',    // 背包分类筛选（all / archer / cannon）
     weaponSel: 0,        // 选中的武器 uid
     weaponScroll: 0,
     weaponBack: 'menu',
@@ -175,9 +177,17 @@ var G = require('./boot.js');
       }
       G.Meta.diamonds -= cost;
       G.Meta.save();
-      var cards = G.Weapon.draw(n >= 10 ? 10 : 1, 'archer');
+      var cards = G.Weapon.draw(n >= 10 ? 10 : 1, Game.gachaPool || 'archer');
       Game.gacha = { cards: cards, start: Date.now(), cost: cost, sfx: {} };
       G.Audio.play('coin');
+    },
+    // 切换抽卡池（archer / cannon），循环
+    setGachaPool: function (dir) {
+      var pools = D.GACHA_POOLS;
+      var idx = pools.indexOf(Game.gachaPool || 'archer');
+      idx = (idx + (dir || 1) + pools.length) % pools.length;
+      Game.gachaPool = pools[idx];
+      G.Audio.play('button');
     },
     skipGacha: function () {
       if (Game.gacha) Game.gacha.start -= 4000;   // 快进到全部翻完

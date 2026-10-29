@@ -824,7 +824,8 @@ var G = require('../boot.js');
   };
 
   // ★ 附加技能（吸血鬼幸存者式独立被动）：升级时独立二选，最多持有3个，每技能满5级质变
-  D.ASKILL_MAX_COUNT = 3;
+  D.  ASKILL_MAX_COUNT = 3;
+  D.GACHA_POOLS = ['archer', 'cannon'];   // 抽卡池子（按职业，抽卡页左右箭头切换）
   D.ASKILLS = {
     star: { id: 'star', name: '星环脉冲', max: 5, desc: lv => [
         '环绕能量环 清怪输出', '尺寸+25% 旋转加快 伤害提升', '双层星环 独立旋转',
@@ -845,6 +846,8 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.36', title: '炮手武器登场', lines: ['新增炮手专属武器池（白→红五档 + 红色星级进阶，效果与弓手武器同级）', '抽卡页左右箭头切换池子：弓手池 / 炮手池，抽出的武器对应职业', '武器背包新增分类页签：全部 / 🏹 弓手 / 💣 炮手', '炮手主角装备炮手武器后手持外观与战斗效果（穿透/冰霜/炎爆等）全部生效'] },
+    { ver: 'v0.5.35', title: '修视距黑边的真正原因', lines: ['根因找到了：视界拉满后视野宽 2914 超过了地图宽 2200，相机贴住地图左缘，右边 714px 是地图外的虚空（你发现的地图边界）', '修复：视距下限自动受地图约束——视野永远不会超出地图，大屏上视界收益自动递减（屏幕已经能看 93% 的地图）'] },
     { ver: 'v0.5.34', title: '视距调试工具', lines: ['新增开发者兑换码：暂停后在设置页输入，一键把视界拉满 Lv3 并打开左下角视口调试浮层（显示窗口/画布/缩放实时参数，用于定位视距黑边的真正原因）'] },
     { ver: 'v0.5.33', title: '黑边彻底修复', lines: ['渲染每帧先铺一层整屏深空底色（未缩放坐标），任何视距缩放/窗口尺寸组合下都不会露出画布底色', '页面与画布底色统一为深空色，就算极端情况黑边也与画面同色不可见'] },
     { ver: 'v0.5.32', title: '修窗口边缘黑边', lines: ['修复：窗口尺寸变化（最大化/滚动条出现/开发者工具开合）后画布右侧或底部残留黑边——画布改为每帧自检视口尺寸，变化立即重设铺满'] },
@@ -909,7 +912,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.34';
+  D.VERSION = 'v0.5.36';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -5754,8 +5757,33 @@ var G = require('../boot.js');
         ctx.fillText('空 · 点下面的武器再按「装备」', 24, barY + 34);
       }
 
+      // 背包分类 tab（仅背包视图）：全部 / 弓手 / 炮手
+      if (!cls) {
+        var tabs = [['all', '全部'], ['archer', '🏹 弓手'], ['cannon', '💣 炮手']];
+        var cur = game.bagFilter || 'all';
+        var tabW = 88, tabH = 32;
+        var tx = W - 24 - tabs.length * (tabW + 8);
+        for (var ti = 0; ti < tabs.length; ti++) {
+          (function (fid, label, i2) {
+            var on = cur === fid;
+            UI.button(ctx, 'bagtab_' + fid, tx + i2 * (tabW + 8), 108, tabW, tabH, label, null,
+              on ? '#2d6cdf' : 'rgba(90,100,140,1)', function () {
+                G.Audio.play('button');
+                game.bagFilter = fid;
+                game.weaponScroll = 0;
+              });
+          })(tabs[ti][0], tabs[ti][1], ti);
+        }
+      }
+
       var list = G.Weapon.listOf(cls);
-      var top = 132, bottomBar = 76;
+      // 背包视图应用分类筛选
+      if (!cls && game.bagFilter && game.bagFilter !== 'all') {
+        var fl = [];
+        for (var li = 0; li < list.length; li++) if (list[li].cls === game.bagFilter) fl.push(list[li]);
+        list = fl;
+      }
+      var top = cls ? 132 : 152, bottomBar = 76;
       ctx.textAlign = 'left';
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
@@ -5882,16 +5910,36 @@ var G = require('../boot.js');
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, bw2 - 2, bh2 - 2, 16); ctx.stroke(); }
 
       var cardH = Math.min(200, bh2 - 34), cardW = cardH * 0.78;
-      UI.drawWeaponCard(ctx, bx + 18, by + (bh2 - cardH) / 2, cardW, cardH, 'archer', 4, 3, { bold: true });
+      var pool = game.gachaPool || 'archer';
+      var poolName = D.PROTOS[pool] ? D.PROTOS[pool].name : '弓手';
+      var poolDesc = { archer: '单体远程 · 主角弓手专用', cannon: '重炮溅射 · 主角炮手专用' };
+      UI.drawWeaponCard(ctx, bx + 58, by + (bh2 - cardH) / 2, cardW, cardH, pool, 4, 3, { bold: true });
 
-      var tx0 = bx + cardW + 34;
+      var tx0 = bx + 58 + cardW + 30;
       ctx.textAlign = 'left';
       ctx.font = 'bold 17px sans-serif';
       ctx.fillStyle = '#fff';
-      ctx.fillText('弓手武器卡池', tx0, by + 46);
+      ctx.fillText(poolName + '武器卡池', tx0, by + 46);
       ctx.font = '11px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText('当前仅开放弓手武器', tx0, by + 66);
+      ctx.fillText(poolDesc[pool] || '', tx0, by + 66);
+
+      // 池子切换箭头（横幅左右两侧）
+      var arrW = 34, arrH = 46;
+      UI.button(ctx, 'pool_prev', bx + 8, by + (bh2 - arrH) / 2, arrW, arrH, '◀', null, 'rgba(20,16,60,0.85)', function () {
+        game.setGachaPool(-1);
+      });
+      UI.button(ctx, 'pool_next', bx + bw2 - 8 - arrW, by + (bh2 - arrH) / 2, arrW, arrH, '▶', null, 'rgba(20,16,60,0.85)', function () {
+        game.setGachaPool(1);
+      });
+      // 池子圆点指示
+      var dotN = D.GACHA_POOLS.length, dotIdx = D.GACHA_POOLS.indexOf(pool);
+      for (var di = 0; di < dotN; di++) {
+        ctx.fillStyle = di === dotIdx ? '#c07cf0' : 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.arc(tx0 + 6 + di * 16, by + bh2 - 12, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // 概率：固定两行（白绿蓝 / 紫红），任何宽度都不会顶出卡片
       var rateRows = [
@@ -5945,10 +5993,11 @@ var G = require('../boot.js');
         '已有 ' + G.Meta.weapons.length + ' 件', 'rgba(80,90,130,1)', function () {
           game.openBag();
         });
-      UI.button(ctx, 'draw1', W / 2 - btnW - 8, btnY, btnW, btnH, '1 抽', '💎' + cost1, '#2d6cdf', function () {
+      var poolLabel = D.PROTOS[game.gachaPool || 'archer'] ? D.PROTOS[game.gachaPool || 'archer'].name : '弓手';
+      UI.button(ctx, 'draw1', W / 2 - btnW - 8, btnY, btnW, btnH, '1 抽', '💎' + cost1 + ' · ' + poolLabel, '#2d6cdf', function () {
         game.doGacha(1);
       }, G.Meta.diamonds < cost1);
-      UI.button(ctx, 'draw10', W / 2 + 8, btnY, btnW, btnH, '10 抽', '💎' + cost10, '#8e44ad', function () {
+      UI.button(ctx, 'draw10', W / 2 + 8, btnY, btnW, btnH, '10 抽', '💎' + cost10 + ' · ' + poolLabel, '#8e44ad', function () {
         game.doGacha(10);
       }, G.Meta.diamonds < cost10);
 
@@ -6542,6 +6591,8 @@ var G = require('./boot.js');
     currentLevel: 1,
     victory: null,
     weaponCls: null,     // 武器页当前职业（null = 背包看全部）
+    gachaPool: 'archer', // 抽卡当前池子（archer / cannon）
+    bagFilter: 'all',    // 背包分类筛选（all / archer / cannon）
     weaponSel: 0,        // 选中的武器 uid
     weaponScroll: 0,
     weaponBack: 'menu',
@@ -6694,9 +6745,17 @@ var G = require('./boot.js');
       }
       G.Meta.diamonds -= cost;
       G.Meta.save();
-      var cards = G.Weapon.draw(n >= 10 ? 10 : 1, 'archer');
+      var cards = G.Weapon.draw(n >= 10 ? 10 : 1, Game.gachaPool || 'archer');
       Game.gacha = { cards: cards, start: Date.now(), cost: cost, sfx: {} };
       G.Audio.play('coin');
+    },
+    // 切换抽卡池（archer / cannon），循环
+    setGachaPool: function (dir) {
+      var pools = D.GACHA_POOLS;
+      var idx = pools.indexOf(Game.gachaPool || 'archer');
+      idx = (idx + (dir || 1) + pools.length) % pools.length;
+      Game.gachaPool = pools[idx];
+      G.Audio.play('button');
     },
     skipGacha: function () {
       if (Game.gacha) Game.gacha.start -= 4000;   // 快进到全部翻完
