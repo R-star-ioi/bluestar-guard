@@ -846,6 +846,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.39', title: '抽卡页排版彻底重做', lines: ['修复卡池横幅文字乱飘：提示/价格两行此前被箭头按钮的居中对齐带偏，整体左漂压到卡面', '横幅高度改为内容驱动下限，矮窗口下文字不再溢出横幅、掉进规则框夹缝'] },
     { ver: 'v0.5.38', title: '修红5★炮手持过大 + 抽卡页排版', lines: ['红 5★ 炮手持再收 14%（横图额外缩放），彻底不遮挡角色', '抽卡页概率改单行（宽屏），文字行距重排，不再重叠'] },
     { ver: 'v0.5.37', title: '修炮手武器手持过大', lines: ['手持武器改为按图片长边归一化：横图（炮/枪）按宽度、竖图（弓）按高度缩放，任何形状的武器显示尺寸一致，不再盖住角色'] },
     { ver: 'v0.5.36', title: '炮手武器登场', lines: ['新增炮手专属武器池（白→红五档 + 红色星级进阶，效果与弓手武器同级）', '抽卡页左右箭头切换池子：弓手池 / 炮手池，抽出的武器对应职业', '武器背包新增分类页签：全部 / 🏹 弓手 / 💣 炮手', '炮手主角装备炮手武器后手持外观与战斗效果（穿透/冰霜/炎爆等）全部生效'] },
@@ -914,7 +915,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.38';
+  D.VERSION = 'v0.5.39';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -4639,7 +4640,7 @@ var G = require('../boot.js');
     },
     hitTest: function (x, y) {
       // 属性面板打开时吞掉所有 UI 点击（任意点击只关面板，不点穿底下按钮）
-      if (G.game && G.game.statsOpen) return null;
+      if (G.game && (G.game.statsOpen || G.game.weaponInfo)) return null;
       // 后注册的在上层，倒序命中
       for (var i = UI.buttons.length - 1; i >= 0; i--) {
         var b = UI.buttons[i];
@@ -4995,6 +4996,126 @@ var G = require('../boot.js');
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.fillText('点击任意处关闭', W / 2, py + ph - 14);
+    },
+
+    // ★ 武器详情面板（背包里选中后再点一次打开；数据全部取自 Weapon.stats，与实际战斗一致）
+    drawWeaponInfo: function (ctx, game) {
+      var W = G.P.screenW, H = G.P.screenH;
+      var w = G.Weapon.find(game.weaponInfo);
+      if (!w) { game.weaponInfo = 0; return; }
+      var T = G.Weapon.TIERS[w.tier];
+      var st = G.Weapon.stats(w);
+      var isEq = (G.Meta.equip || {})[w.cls] === w.uid;
+
+      // ---- 内容先行计算，面板高度自适应 ----
+      var attrs = [];
+      attrs.push(['攻击', '+' + Math.round(st.atk * 100) + '%']);
+      attrs.push(['攻速', '+' + Math.round(st.aspd * 100) + '%']);
+      if (st.crit > 0) attrs.push(['暴击率', '+' + Math.round(st.crit * 100) + '%']);
+      if (st.critDmg > 0) attrs.push(['暴击伤害', '+' + Math.round(st.critDmg * 100) + '%']);
+      if (st.range > 1) attrs.push(['射程', '+' + Math.round((st.range - 1) * 100) + '%']);
+      if (st.alldmg > 0) attrs.push(['全伤害', '+' + Math.round(st.alldmg * 100) + '%']);
+      attrs.push(['装备加成', '该职业攻击 ×' + G.Weapon.bonus(w).toFixed(2)]);
+
+      var fx = [];
+      if (w.tier === 4) {
+        fx.push('🔥 炎爆：命中触发范围爆炸（半径 ' + st.burstR + '）');
+        fx.push('🔥 灼烧：叠 ' + st.burnStack + ' 层，每层 ' + Math.round(st.burnDps * 100) + '%/s，' + st.burnDur + 's');
+        fx.push('🔥 无视 25% 火抗 · 无限穿透（每穿 +20% 伤害）');
+        if (w.star >= 2) fx.push('2★ 灼烧强化：5 层 35%/s，击杀灼烧目标回血');
+        if (w.star >= 3) fx.push('3★ 火焰轨迹，基础攻击额外 +40%');
+        if (w.star >= 4) fx.push('4★ 双重炎爆：暴击时炎爆伤害 +100%');
+        if (w.star >= 5) fx.push('5★ 焚天箭雨：每 3 次击杀降下箭雨');
+      } else if (w.tier === 3) {
+        fx.push('🌀 无限穿透，每穿 +12% 伤害');
+        fx.push('🌑 暗影分裂：命中分裂 2 道暗影箭（60% 攻击）');
+        fx.push('🌑 无视 15% 护甲 · 射程 +15% · 全伤害 +40%');
+      } else if (w.tier === 2) {
+        fx.push('❄ 穿透 ' + st.pierce + ' 名敌人（每穿 +5% 伤害）');
+        fx.push('❄ 冰霜溅射：周围敌人受 30% 攻击力伤害');
+        fx.push('❄ 35% 概率冻结 0.8s；寒气减速 40% / 攻速 -20%，2s');
+      } else if (w.tier === 1) {
+        fx.push('🎯 穿透 1 名敌人（穿透后伤害 -10%）');
+      } else {
+        fx.push('无特殊效果，均衡的基础加成');
+      }
+
+      var pw = Math.min(352, W - 36);
+      // 128(头部) + 属性行 + 30(效果标题) + 效果行 + 78(效果区到底部提示的安全距)
+      var ph = 128 + attrs.length * 18 + 30 + fx.length * 17 + 78;
+      var px = (W - pw) / 2, py = Math.max(40, (H - ph) / 2);
+
+      // ---- 绘制 ----
+      ctx.fillStyle = 'rgba(4,6,18,0.82)';
+      ctx.fillRect(0, 0, W, H);
+      UI.pill(ctx, px, py, pw, ph, 'rgba(14,22,50,0.97)', 14);
+      ctx.strokeStyle = T.glow;
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(px + 0.5, py + 0.5, pw - 1, ph - 1, 14); ctx.stroke(); }
+
+      // 左：武器卡面
+      var cardH = 112, cardW = cardH * 0.78;
+      UI.drawWeaponCard(ctx, px + 14, py + 14, cardW, cardH, w.cls, w.tier, w.star, { bold: true });
+
+      // 右：标题区
+      var tx = px + 14 + cardW + 14;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 19px sans-serif';
+      ctx.fillStyle = T.color;
+      ctx.fillText(T.name + ' ' + (w.star || 1) + '★', tx, py + 36);
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      var proto = D.PROTOS[w.cls];
+      ctx.fillText((proto ? proto.name : w.cls) + '武器', tx, py + 56);
+      ctx.font = 'bold 11px sans-serif';
+      if (isEq) {
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText('● 已装备中', tx, py + 76);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillText('未装备（左下角「装备」按钮穿上）', tx, py + 76);
+      }
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('#' + w.uid, tx, py + 94);
+
+      // 属性区
+      var ay = py + 128 + 14;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('◆ 属性', px + 20, ay);
+      ay += 6;
+      ctx.font = '12px sans-serif';
+      for (var ai = 0; ai < attrs.length; ai++) {
+        ay += 18;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText(attrs[ai][0], px + 20, ay);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#7ef9ff';
+        ctx.fillText(attrs[ai][1], px + pw - 20, ay);
+      }
+
+      // 效果区
+      ay += 24;
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('◆ 战斗效果', px + 20, ay);
+      ctx.font = '11px sans-serif';
+      for (var fi = 0; fi < fx.length; fi++) {
+        ay += 17;
+        ctx.fillStyle = 'rgba(255,255,255,0.78)';
+        ctx.fillText(fx[fi], px + 20, ay);
+      }
+
+      // 底部：合成提示 + 关闭提示
+      var fy = py + ph - 40;
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('合成：3 件同阶同星 → 高一阶 · 2 件同星红 → 升一星', W / 2, fy);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText('点击任意处关闭', W / 2, py + ph - 16);
     },
 
     drawAnnounce: function (ctx, game, yPct) {
@@ -6600,6 +6721,7 @@ var G = require('./boot.js');
     gachaPool: 'archer', // 抽卡当前池子（archer / cannon）
     bagFilter: 'all',    // 背包分类筛选（all / archer / cannon）
     weaponSel: 0,        // 选中的武器 uid
+    weaponInfo: 0,       // 详情面板打开的武器 uid（0 = 关闭）
     weaponScroll: 0,
     weaponBack: 'menu',
     gacha: null,         // 抽卡结果动画状态
@@ -6637,6 +6759,7 @@ var G = require('./boot.js');
       if (s !== 'playing') {
         Game.panelHero = null;
         Game.statsOpen = false;   // 离开战斗界面时关掉属性面板，避免与其他弹层冲突
+        Game.weaponInfo = 0;      // 武器详情面板同理
         if (s !== 'levelup') { G.Input.joyReset(); Game.joyId = null; }
       }
     },
@@ -6716,7 +6839,13 @@ var G = require('./boot.js');
       Game.setState('gacha');
     },
     selectWeapon: function (uid) {
-      Game.weaponSel = (Game.weaponSel === uid) ? 0 : uid;
+      if (Game.weaponSel === uid && Game.weaponInfo !== uid) {
+        // 再点一次已选中的武器 → 查看详情（装备/卸下走左下角按钮）
+        Game.weaponInfo = uid;
+      } else {
+        Game.weaponSel = (Game.weaponSel === uid) ? 0 : uid;
+        Game.weaponInfo = 0;
+      }
       G.Audio.play('button');
     },
     equipWeapon: function (w) {
@@ -7074,8 +7203,13 @@ var G = require('./boot.js');
         Game.heroDrag = { id: id, y0: y, base: Game.heroScroll || 0 };
         return;
       }
-      // 武器页 / 背包：同上，拖空白处滚动网格
+      // 武器页 / 背包：详情面板打开时，点任意处先关面板（按钮已被 Input 层拦截，不会误触）
       if (Game.state === 'weapons' || Game.state === 'bag') {
+        if (Game.weaponInfo) {
+          Game.weaponInfo = 0;
+          return;
+        }
+        // 否则拖空白处滚动网格
         Game.weaponDrag = { id: id, y0: y, base: Game.weaponScroll || 0 };
         return;
       }
@@ -7266,6 +7400,8 @@ var G = require('./boot.js');
           G.Hero.draw(ctx, ox, oy);
         }
         G.UI.draw(ctx, Game);
+        // 武器详情面板（背包/武器页，盖在页面之上）
+        if (Game.weaponInfo && G.UI.drawWeaponInfo) G.UI.drawWeaponInfo(ctx, Game);
         return;
       }
 

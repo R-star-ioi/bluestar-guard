@@ -26,6 +26,7 @@ var G = require('./boot.js');
     gachaPool: 'archer', // 抽卡当前池子（archer / cannon）
     bagFilter: 'all',    // 背包分类筛选（all / archer / cannon）
     weaponSel: 0,        // 选中的武器 uid
+    weaponInfo: 0,       // 详情面板打开的武器 uid（0 = 关闭）
     weaponScroll: 0,
     weaponBack: 'menu',
     gacha: null,         // 抽卡结果动画状态
@@ -63,6 +64,7 @@ var G = require('./boot.js');
       if (s !== 'playing') {
         Game.panelHero = null;
         Game.statsOpen = false;   // 离开战斗界面时关掉属性面板，避免与其他弹层冲突
+        Game.weaponInfo = 0;      // 武器详情面板同理
         if (s !== 'levelup') { G.Input.joyReset(); Game.joyId = null; }
       }
     },
@@ -142,7 +144,13 @@ var G = require('./boot.js');
       Game.setState('gacha');
     },
     selectWeapon: function (uid) {
-      Game.weaponSel = (Game.weaponSel === uid) ? 0 : uid;
+      if (Game.weaponSel === uid && Game.weaponInfo !== uid) {
+        // 再点一次已选中的武器 → 查看详情（装备/卸下走左下角按钮）
+        Game.weaponInfo = uid;
+      } else {
+        Game.weaponSel = (Game.weaponSel === uid) ? 0 : uid;
+        Game.weaponInfo = 0;
+      }
       G.Audio.play('button');
     },
     equipWeapon: function (w) {
@@ -500,8 +508,13 @@ var G = require('./boot.js');
         Game.heroDrag = { id: id, y0: y, base: Game.heroScroll || 0 };
         return;
       }
-      // 武器页 / 背包：同上，拖空白处滚动网格
+      // 武器页 / 背包：详情面板打开时，点任意处先关面板（按钮已被 Input 层拦截，不会误触）
       if (Game.state === 'weapons' || Game.state === 'bag') {
+        if (Game.weaponInfo) {
+          Game.weaponInfo = 0;
+          return;
+        }
+        // 否则拖空白处滚动网格
         Game.weaponDrag = { id: id, y0: y, base: Game.weaponScroll || 0 };
         return;
       }
@@ -692,6 +705,8 @@ var G = require('./boot.js');
           G.Hero.draw(ctx, ox, oy);
         }
         G.UI.draw(ctx, Game);
+        // 武器详情面板（背包/武器页，盖在页面之上）
+        if (Game.weaponInfo && G.UI.drawWeaponInfo) G.UI.drawWeaponInfo(ctx, Game);
         return;
       }
 
