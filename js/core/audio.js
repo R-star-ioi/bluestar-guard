@@ -12,17 +12,21 @@ var G = require('../boot.js');
         if (!AC) { Audio.enabled = false; return; }
         Audio.ctx = new AC();
         // 主音量节点：设置里的「音效大小」控制这里
+        // 增益曲线：滑条 30% ≈ 原始 100% 响度，100% = 270%；压缩器防止超 100% 增益削波
         try {
           Audio.master = Audio.ctx.createGain();
-          Audio.master.gain.value = (G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1;
-          Audio.master.connect(Audio.ctx.destination);
+          Audio.comp = Audio.ctx.createDynamicsCompressor();
+          Audio.master.connect(Audio.comp);
+          Audio.comp.connect(Audio.ctx.destination);
+          Audio.setVolume((G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1);
         } catch (e) { Audio.master = null; }
       } catch (e) { Audio.enabled = false; }
     },
-    // 设置里拖动「音效大小」时实时调
+    // 设置里拖动「音效大小」时实时调（30% ≈ 原 100% 响度，100% ≈ 270%）
     setVolume: function (v) {
       if (Audio.master && Audio.ctx) {
-        try { Audio.master.gain.value = Math.max(0, Math.min(1, v)); } catch (e) { }
+        var g = Math.max(0, Math.min(1, v)) * 2.7;
+        try { Audio.master.gain.value = g; } catch (e) { }
       }
     },
     resume: function () {

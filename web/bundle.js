@@ -474,17 +474,21 @@ var G = require('../boot.js');
         if (!AC) { Audio.enabled = false; return; }
         Audio.ctx = new AC();
         // 主音量节点：设置里的「音效大小」控制这里
+        // 增益曲线：滑条 30% ≈ 原始 100% 响度，100% = 270%；压缩器防止超 100% 增益削波
         try {
           Audio.master = Audio.ctx.createGain();
-          Audio.master.gain.value = (G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1;
-          Audio.master.connect(Audio.ctx.destination);
+          Audio.comp = Audio.ctx.createDynamicsCompressor();
+          Audio.master.connect(Audio.comp);
+          Audio.comp.connect(Audio.ctx.destination);
+          Audio.setVolume((G.Meta && typeof G.Meta.sfxVol === 'number') ? G.Meta.sfxVol : 1);
         } catch (e) { Audio.master = null; }
       } catch (e) { Audio.enabled = false; }
     },
-    // 设置里拖动「音效大小」时实时调
+    // 设置里拖动「音效大小」时实时调（30% ≈ 原 100% 响度，100% ≈ 270%）
     setVolume: function (v) {
       if (Audio.master && Audio.ctx) {
-        try { Audio.master.gain.value = Math.max(0, Math.min(1, v)); } catch (e) { }
+        var g = Math.max(0, Math.min(1, v)) * 2.7;
+        try { Audio.master.gain.value = g; } catch (e) { }
       }
     },
     resume: function () {
@@ -818,6 +822,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.27', title: '修拉条拖不动', lines: ['设置页滑条被全屏透明按钮拦截了触摸，导致音量拉条拉不动——输入路由改为滑条优先，拖动实时生效、松手保存'] },
     { ver: 'v0.5.26', title: '音量控制 + 面板冲突修复', lines: ['设置页新增「音效大小」「音乐大小」两条拉条，实时生效并保存', '修复：属性面板打开时突然升级，属性面板会和强化选择界面叠在一起——现在进任何其他界面都会自动关掉属性面板'] },
     { ver: 'v0.5.25', title: '属性面板排版修复', lines: ['分组标题（武器加成/局内强化）与内容行重叠的问题，间距重排'] },
     { ver: 'v0.5.24', title: 'DPS 与 ? 对齐', lines: ['「?」按钮与 DPS 文字同一水平线并紧贴其右，整组下移 10px'] },
@@ -874,7 +879,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.26';
+  D.VERSION = 'v0.5.27';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
