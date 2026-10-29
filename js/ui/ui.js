@@ -157,12 +157,12 @@ var G = require('../boot.js');
       ctx.textAlign = 'left';
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#7ef9ff';
-      ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
+      ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 80);
 
       // 「?」属性面板按钮（点击查看主角各项属性；y 往下 20px 避开血条区）
       ctx.fillStyle = 'rgba(10,16,40,0.8)';
       ctx.beginPath();
-      ctx.arc(104, 85, 10, 0, Math.PI * 2);
+      ctx.arc(92, 76, 10, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = 'rgba(126,249,255,0.7)';
       ctx.lineWidth = 1.5;
@@ -170,8 +170,8 @@ var G = require('../boot.js');
       ctx.fillStyle = '#7ef9ff';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('?', 104, 89.5);
-      UI.reg('statinfo', 92, 73, 24, 24, function () {
+      ctx.fillText('?', 92, 80.5);
+      UI.reg('statinfo', 80, 64, 24, 24, function () {
         G.Audio.play('button');
         G.game.statsOpen = !G.game.statsOpen;
       });
@@ -185,7 +185,7 @@ var G = require('../boot.js');
         ctx.font = 'bold 10px sans-serif';
         ctx.fillStyle = '#ff8f8f';
         ctx.textAlign = 'left';
-        ctx.fillText(deb.join('  '), 152, 70);
+        ctx.fillText(deb.join('  '), 130, 80);
       }
 
       // 关卡与波次（中）
