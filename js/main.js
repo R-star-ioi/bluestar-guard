@@ -441,12 +441,20 @@ var G = require('./boot.js');
     },
 
     // 主界面领取宝箱（按关卡领取，每关独立）
-    claimChest: function (level, i) {
+    claimChest: function (level, i, sx, sy) {
       var amt = G.Meta.claimChest(level, i);
       if (!amt) { G.Audio.play('error'); return; }
       G.Audio.play('coin');
+      // 钻石飞行动画：8 颗从宝箱飞向右上角钻石余额，逐颗到达时叮一声
+      var tx = G.P.screenW - 116, ty = 30;
+      Game.gemFly = [];
+      for (var k = 0; k < 8; k++) {
+        Game.gemFly.push({
+          x: sx, y: sy, tx: tx, ty: ty,
+          t0: Date.now() + k * 70, dur: 520 + k * 30
+        });
+      }
       Game.showMsg('+' + amt + ' 钻石', '#7ef9ff', 1.2);
-      G.FX.text(G.Player.x, G.Player.y - 30, '+' + amt + ' 钻石', '#7ef9ff', 15);
     },
 
     nextLevel: function () {

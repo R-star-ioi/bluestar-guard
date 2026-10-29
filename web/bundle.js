@@ -822,6 +822,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.28', title: '音效响度增强', lines: ['音效拉条的响度曲线重做：30% ≈ 原来的 100% 响度，拉满 100% = 原 270%', '加了压缩器防止大音量爆音'] },
     { ver: 'v0.5.27', title: '修拉条拖不动', lines: ['设置页滑条被全屏透明按钮拦截了触摸，导致音量拉条拉不动——输入路由改为滑条优先，拖动实时生效、松手保存'] },
     { ver: 'v0.5.26', title: '音量控制 + 面板冲突修复', lines: ['设置页新增「音效大小」「音乐大小」两条拉条，实时生效并保存', '修复：属性面板打开时突然升级，属性面板会和强化选择界面叠在一起——现在进任何其他界面都会自动关掉属性面板'] },
     { ver: 'v0.5.25', title: '属性面板排版修复', lines: ['分组标题（武器加成/局内强化）与内容行重叠的问题，间距重排'] },
@@ -879,7 +880,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.27';
+  D.VERSION = 'v0.5.28';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -5224,19 +5225,39 @@ var G = require('../boot.js');
       // 右上角资源栏（钻石 / 升级金币）
       var rrx = W - 158, rry = 16;
       UI.pill(ctx, rrx, rry, 74, 26, 'rgba(0,0,0,0.45)', 13);
-      UI.drawDiamond(ctx, rrx + 14, rry + 13, 7);
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillStyle = '#7ef9ff';
+      ctx.font = '13px sans-serif';
       ctx.textAlign = 'center';
+      ctx.fillText('💎', rrx + 14, rry + 18);
+      ctx.font = 'bold 12px sans-serif';
+      var bump = game.diamondBump && (Date.now() - game.diamondBump < 400);
+      ctx.fillStyle = bump ? '#fff' : '#7ef9ff';
       ctx.fillText(String(G.Meta.diamonds), rrx + 42, rry + 18);
       UI.pill(ctx, rrx + 78, rry, 74, 26, 'rgba(0,0,0,0.45)', 13);
-      ctx.fillStyle = '#ffd700';
-      ctx.beginPath();
-      ctx.arc(rrx + 92, rry + 13, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.font = '14px sans-serif';
+      ctx.fillText('🪙', rrx + 92, rry + 18);
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#ffd166';
       ctx.fillText(String(G.Meta.gold), rrx + 120, rry + 18);
+
+      // 宝箱领取：钻石粒子飞向右上角钻石余额
+      if (game.gemFly && game.gemFly.length) {
+        var nowT = Date.now();
+        for (var gi = game.gemFly.length - 1; gi >= 0; gi--) {
+          var gf = game.gemFly[gi];
+          if (nowT < gf.t0) continue;
+          var gk = Math.min(1, (nowT - gf.t0) / gf.dur);
+          var ge = gk * gk * (3 - 2 * gk);   // smoothstep 缓动
+          var gxx = gf.x + (gf.tx - gf.x) * ge;
+          var gyy = gf.y + (gf.ty - gf.y) * ge - Math.sin(gk * Math.PI) * 60;
+          ctx.font = '13px sans-serif';
+          ctx.fillText('💎', gxx, gyy);
+          if (gk >= 1) {
+            G.Audio.play('coin');
+            game.diamondBump = nowT;
+            game.gemFly.splice(gi, 1);
+          }
+        }
+      }
 
       // ---- 标题区（logo 锁版）：标题 → 副标题 → 水晶徽记，自成一块，
       //      下方关卡卡片按这一块的高度定位，不再压住徽记 ----
@@ -5318,9 +5339,9 @@ var G = require('../boot.js');
         ctx.fillText(!hasChests ? '' : (claimed ? '已开启' : (got ? '点击领取' : boxReqs[bi])), bcx, by0 + 52);
         // 可领取的箱子可点击（按关卡领取）
         if (got && !claimed) {
-          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx, l) {
-            return function () { game.claimChest(l, idx); };
-          })(bi, lv));
+          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx, l, cx0, cy0) {
+            return function () { game.claimChest(l, idx, cx0, cy0); };
+          })(bi, lv, bcx, by0));
         }
       }
       ctx.font = '9px sans-serif';
@@ -6883,12 +6904,20 @@ var G = require('./boot.js');
     },
 
     // 主界面领取宝箱（按关卡领取，每关独立）
-    claimChest: function (level, i) {
+    claimChest: function (level, i, sx, sy) {
       var amt = G.Meta.claimChest(level, i);
       if (!amt) { G.Audio.play('error'); return; }
       G.Audio.play('coin');
+      // 钻石飞行动画：8 颗从宝箱飞向右上角钻石余额，逐颗到达时叮一声
+      var tx = G.P.screenW - 116, ty = 30;
+      Game.gemFly = [];
+      for (var k = 0; k < 8; k++) {
+        Game.gemFly.push({
+          x: sx, y: sy, tx: tx, ty: ty,
+          t0: Date.now() + k * 70, dur: 520 + k * 30
+        });
+      }
       Game.showMsg('+' + amt + ' 钻石', '#7ef9ff', 1.2);
-      G.FX.text(G.Player.x, G.Player.y - 30, '+' + amt + ' 钻石', '#7ef9ff', 15);
     },
 
     nextLevel: function () {

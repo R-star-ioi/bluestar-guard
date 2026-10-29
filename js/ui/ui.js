@@ -657,19 +657,39 @@ var G = require('../boot.js');
       // 右上角资源栏（钻石 / 升级金币）
       var rrx = W - 158, rry = 16;
       UI.pill(ctx, rrx, rry, 74, 26, 'rgba(0,0,0,0.45)', 13);
-      UI.drawDiamond(ctx, rrx + 14, rry + 13, 7);
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillStyle = '#7ef9ff';
+      ctx.font = '13px sans-serif';
       ctx.textAlign = 'center';
+      ctx.fillText('💎', rrx + 14, rry + 18);
+      ctx.font = 'bold 12px sans-serif';
+      var bump = game.diamondBump && (Date.now() - game.diamondBump < 400);
+      ctx.fillStyle = bump ? '#fff' : '#7ef9ff';
       ctx.fillText(String(G.Meta.diamonds), rrx + 42, rry + 18);
       UI.pill(ctx, rrx + 78, rry, 74, 26, 'rgba(0,0,0,0.45)', 13);
-      ctx.fillStyle = '#ffd700';
-      ctx.beginPath();
-      ctx.arc(rrx + 92, rry + 13, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.font = '14px sans-serif';
+      ctx.fillText('🪙', rrx + 92, rry + 18);
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#ffd166';
       ctx.fillText(String(G.Meta.gold), rrx + 120, rry + 18);
+
+      // 宝箱领取：钻石粒子飞向右上角钻石余额
+      if (game.gemFly && game.gemFly.length) {
+        var nowT = Date.now();
+        for (var gi = game.gemFly.length - 1; gi >= 0; gi--) {
+          var gf = game.gemFly[gi];
+          if (nowT < gf.t0) continue;
+          var gk = Math.min(1, (nowT - gf.t0) / gf.dur);
+          var ge = gk * gk * (3 - 2 * gk);   // smoothstep 缓动
+          var gxx = gf.x + (gf.tx - gf.x) * ge;
+          var gyy = gf.y + (gf.ty - gf.y) * ge - Math.sin(gk * Math.PI) * 60;
+          ctx.font = '13px sans-serif';
+          ctx.fillText('💎', gxx, gyy);
+          if (gk >= 1) {
+            G.Audio.play('coin');
+            game.diamondBump = nowT;
+            game.gemFly.splice(gi, 1);
+          }
+        }
+      }
 
       // ---- 标题区（logo 锁版）：标题 → 副标题 → 水晶徽记，自成一块，
       //      下方关卡卡片按这一块的高度定位，不再压住徽记 ----
@@ -751,9 +771,9 @@ var G = require('../boot.js');
         ctx.fillText(!hasChests ? '' : (claimed ? '已开启' : (got ? '点击领取' : boxReqs[bi])), bcx, by0 + 52);
         // 可领取的箱子可点击（按关卡领取）
         if (got && !claimed) {
-          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx, l) {
-            return function () { game.claimChest(l, idx); };
-          })(bi, lv));
+          UI.reg('chest_' + bi, bcx - 30, by0 - 6, 60, 62, (function (idx, l, cx0, cy0) {
+            return function () { game.claimChest(l, idx, cx0, cy0); };
+          })(bi, lv, bcx, by0));
         }
       }
       ctx.font = '9px sans-serif';
