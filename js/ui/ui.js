@@ -1304,7 +1304,7 @@ var G = require('../boot.js');
       ctx.fillText(poolName + '武器卡池', tx0, by + 46);
       ctx.font = '11px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(poolDesc[pool] || '', tx0, by + 66);
+      ctx.fillText(poolDesc[pool] || '', tx0, by + (compact ? 60 : 66));
 
       // 池子切换箭头（横幅左右两侧）
       var arrW = 34, arrH = 46;
@@ -1314,21 +1314,15 @@ var G = require('../boot.js');
       UI.button(ctx, 'pool_next', bx + bw2 - 8 - arrW, by + (bh2 - arrH) / 2, arrW, arrH, '▶', null, 'rgba(20,16,60,0.85)', function () {
         game.setGachaPool(1);
       });
-      // 池子圆点指示
-      var dotN = D.GACHA_POOLS.length, dotIdx = D.GACHA_POOLS.indexOf(pool);
-      for (var di = 0; di < dotN; di++) {
-        ctx.fillStyle = di === dotIdx ? '#c07cf0' : 'rgba(255,255,255,0.3)';
-        ctx.beginPath();
-        ctx.arc(tx0 + 6 + di * 16, by + bh2 - 12, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // 池子圆点已移至横幅右上角
 
-      // 概率：固定两行（白绿蓝 / 紫红），任何宽度都不会顶出卡片
-      var rateRows = [
-        [[0, '白', 80], [1, '绿', 10], [2, '蓝', 6]],
-        [[3, '紫', 3], [4, '红', 1]]
-      ];
-      var ryy = by + 94;
+
+      // 概率：宽屏一行五项，窄屏两行（白绿蓝 / 紫红）
+      var rateRows = (W >= 480)
+        ? [[[0, '白', 80], [1, '绿', 10], [2, '蓝', 6], [3, '紫', 3], [4, '红', 1]]]
+        : [[[0, '白', 80], [1, '绿', 10], [2, '蓝', 6]], [[3, '紫', 3], [4, '红', 1]]];
+      var compact = bh2 < 210;          // 矮横幅（窗口扁）时收紧行距
+      var ryy = by + (compact ? 84 : 94);
       ctx.font = '10px sans-serif';
       for (var r = 0; r < rateRows.length; r++) {
         var rx = tx0;
@@ -1344,12 +1338,20 @@ var G = require('../boot.js');
         }
         ryy += 18;
       }
-      var hintY = ryy + 2;
+      var hintY = ryy + (compact ? 22 : 16);
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.fillText('紫 / 红品质抽到时会有光晕', tx0, hintY);
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillText('1 抽 60 钻 · 10 抽 600 钻', tx0, hintY + 18);
+      ctx.fillText('1 抽 60 钻 · 10 抽 600 钻', tx0, hintY + 19);
+      // 池子圆点：横幅右上角（避开下方文字）
+      var dotN2 = D.GACHA_POOLS.length, dotIdx2 = D.GACHA_POOLS.indexOf(pool);
+      for (var dj = 0; dj < dotN2; dj++) {
+        ctx.fillStyle = dj === dotIdx2 ? '#c07cf0' : 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.arc(bx + bw2 - 44 + dj * 16, by + 18, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // 规则说明
       var ry = by + bh2 + 14;

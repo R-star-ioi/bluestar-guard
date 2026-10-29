@@ -846,6 +846,7 @@ var G = require('../boot.js');
   D.ASKILL_ORDER = ['star', 'echo', 'shield', 'magnet', 'bomb'];
   // ★ 更新公告（主菜单展示）
   D.CHANGELOG = [
+    { ver: 'v0.5.37', title: '修炮手武器手持过大', lines: ['手持武器改为按图片长边归一化：横图（炮/枪）按宽度、竖图（弓）按高度缩放，任何形状的武器显示尺寸一致，不再盖住角色'] },
     { ver: 'v0.5.36', title: '炮手武器登场', lines: ['新增炮手专属武器池（白→红五档 + 红色星级进阶，效果与弓手武器同级）', '抽卡页左右箭头切换池子：弓手池 / 炮手池，抽出的武器对应职业', '武器背包新增分类页签：全部 / 🏹 弓手 / 💣 炮手', '炮手主角装备炮手武器后手持外观与战斗效果（穿透/冰霜/炎爆等）全部生效'] },
     { ver: 'v0.5.35', title: '修视距黑边的真正原因', lines: ['根因找到了：视界拉满后视野宽 2914 超过了地图宽 2200，相机贴住地图左缘，右边 714px 是地图外的虚空（你发现的地图边界）', '修复：视距下限自动受地图约束——视野永远不会超出地图，大屏上视界收益自动递减（屏幕已经能看 93% 的地图）'] },
     { ver: 'v0.5.34', title: '视距调试工具', lines: ['新增开发者兑换码：暂停后在设置页输入，一键把视界拉满 Lv3 并打开左下角视口调试浮层（显示窗口/画布/缩放实时参数，用于定位视距黑边的真正原因）'] },
@@ -912,7 +913,7 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.36';
+  D.VERSION = 'v0.5.37';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
@@ -1236,6 +1237,7 @@ var G = require('../boot.js');
       // 以长边归一化：竖图（弓）按高度、横图（炮/枪）按宽度缩放，显示面积一致
       var side = Math.max(iw, ih) || h;
       var scale = h / side;
+      if (iw > ih) scale *= 0.86;   // 横图（炮/枪）再收一点，避免遮挡角色
       var dw = iw * scale, dh = ih * scale;
       ctx.save();
       ctx.translate(cx, cy);
@@ -5925,7 +5927,7 @@ var G = require('../boot.js');
       ctx.fillText(poolName + '武器卡池', tx0, by + 46);
       ctx.font = '11px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(poolDesc[pool] || '', tx0, by + 66);
+      ctx.fillText(poolDesc[pool] || '', tx0, by + (compact ? 60 : 66));
 
       // 池子切换箭头（横幅左右两侧）
       var arrW = 34, arrH = 46;
@@ -5935,21 +5937,15 @@ var G = require('../boot.js');
       UI.button(ctx, 'pool_next', bx + bw2 - 8 - arrW, by + (bh2 - arrH) / 2, arrW, arrH, '▶', null, 'rgba(20,16,60,0.85)', function () {
         game.setGachaPool(1);
       });
-      // 池子圆点指示
-      var dotN = D.GACHA_POOLS.length, dotIdx = D.GACHA_POOLS.indexOf(pool);
-      for (var di = 0; di < dotN; di++) {
-        ctx.fillStyle = di === dotIdx ? '#c07cf0' : 'rgba(255,255,255,0.3)';
-        ctx.beginPath();
-        ctx.arc(tx0 + 6 + di * 16, by + bh2 - 12, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // 池子圆点已移至横幅右上角
 
-      // 概率：固定两行（白绿蓝 / 紫红），任何宽度都不会顶出卡片
-      var rateRows = [
-        [[0, '白', 80], [1, '绿', 10], [2, '蓝', 6]],
-        [[3, '紫', 3], [4, '红', 1]]
-      ];
-      var ryy = by + 94;
+
+      // 概率：宽屏一行五项，窄屏两行（白绿蓝 / 紫红）
+      var rateRows = (W >= 480)
+        ? [[[0, '白', 80], [1, '绿', 10], [2, '蓝', 6], [3, '紫', 3], [4, '红', 1]]]
+        : [[[0, '白', 80], [1, '绿', 10], [2, '蓝', 6]], [[3, '紫', 3], [4, '红', 1]]];
+      var compact = bh2 < 210;          // 矮横幅（窗口扁）时收紧行距
+      var ryy = by + (compact ? 84 : 94);
       ctx.font = '10px sans-serif';
       for (var r = 0; r < rateRows.length; r++) {
         var rx = tx0;
@@ -5965,12 +5961,20 @@ var G = require('../boot.js');
         }
         ryy += 18;
       }
-      var hintY = ryy + 2;
+      var hintY = ryy + (compact ? 22 : 16);
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.fillText('紫 / 红品质抽到时会有光晕', tx0, hintY);
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillText('1 抽 60 钻 · 10 抽 600 钻', tx0, hintY + 18);
+      ctx.fillText('1 抽 60 钻 · 10 抽 600 钻', tx0, hintY + 19);
+      // 池子圆点：横幅右上角（避开下方文字）
+      var dotN2 = D.GACHA_POOLS.length, dotIdx2 = D.GACHA_POOLS.indexOf(pool);
+      for (var dj = 0; dj < dotN2; dj++) {
+        ctx.fillStyle = dj === dotIdx2 ? '#c07cf0' : 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.arc(bx + bw2 - 44 + dj * 16, by + 18, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // 规则说明
       var ry = by + bh2 + 14;

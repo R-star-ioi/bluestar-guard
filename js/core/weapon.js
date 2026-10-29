@@ -71,6 +71,7 @@ var G = require('../boot.js');
       // 以长边归一化：竖图（弓）按高度、横图（炮/枪）按宽度缩放，显示面积一致
       var side = Math.max(iw, ih) || h;
       var scale = h / side;
+      if (iw > ih) scale *= 0.86;   // 横图（炮/枪）再收一点，避免遮挡角色
       var dw = iw * scale, dh = ih * scale;
       ctx.save();
       ctx.translate(cx, cy);

@@ -1,0 +1,20 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#05070f}iframe{border:0;display:block}</style></head><body>
+<iframe id="f" width="514" height="553"></iframe>
+<script>
+localStorage.setItem('lx_meta', JSON.stringify({gold:420,diamonds:3000,unlocked:{archer:true,cannon:true},levels:{archer:8,cannon:5},selected:'cannon',maxLevel:10,selectedLevel:1,chests:{},weapons:[{uid:1,cls:'cannon',tier:4,star:5}],equip:{cannon:1},nextWuid:2}));
+var f = document.getElementById('f');
+f.src = '/index.html';
+var ran = false;
+setInterval(function(){
+  try {
+    var w = f.contentWindow, G = w && w.G;
+    if (G && G.game && !ran) {
+      ran = true;
+      var GM = G.game;
+      GM.render();
+      GM.openGacha();
+      GM.render();
+    }
+  } catch(e) { document.title = 'FAIL ' + e; }
+}, 400);
+</script></body></html>
