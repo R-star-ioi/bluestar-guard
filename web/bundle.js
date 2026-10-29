@@ -1233,7 +1233,10 @@ var G = require('../boot.js');
       if (!rec || !rec.ready || !rec.img) return false;
       var img = rec.img;
       var iw = img.width || h, ih = img.height || h;
-      var dh = h, dw = iw * (h / ih);
+      // 以长边归一化：竖图（弓）按高度、横图（炮/枪）按宽度缩放，显示面积一致
+      var side = Math.max(iw, ih) || h;
+      var scale = h / side;
+      var dw = iw * scale, dh = ih * scale;
       ctx.save();
       ctx.translate(cx, cy);
       if (flip) ctx.scale(-1, 1);
