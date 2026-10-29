@@ -118,16 +118,51 @@ var G = require('../boot.js');
         segX += 17 + ctx.measureText(segs[sg].val).width + segGap;
       }
 
+      // Boss 血条（世界吞噬者优先显示）
+      var dv = (G.Devourer && G.Devourer.active) ? G.Devourer.hpInfo() : null;
+      var boss = null;
+      if (!dv) {
+        for (var i = 0; i < G.Enemy.list.length; i++) if (G.Enemy.list[i].boss) { boss = G.Enemy.list[i]; break; }
+      }
+      if (dv && dv.max > 0) {
+        var bw = Math.min(340, W - 90);
+        var bx = (W - bw) / 2, by = 74;
+        UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(30,4,34,0.78)', 10);
+        ctx.fillStyle = '#3a0f38';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); } else ctx.fillRect(bx, by, bw, 14);
+        ctx.fillStyle = '#b565c9';
+        var hk = Math.max(0, dv.cur / dv.max);
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * hk, 12, 6); ctx.fill(); }
+        else ctx.fillRect(bx + 1, by + 1, (bw - 2) * hk, 12);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText('世界吞噬者' + (dv.worms > 1 ? ' ×' + dv.worms : ''), W / 2, by + 11);
+      } else if (boss) {
+        var bw = Math.min(320, W - 100);
+        var bx = (W - bw) / 2, by = 74;
+        UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(40,0,0,0.7)', 10);
+        ctx.fillStyle = '#3d0a0a';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); } else ctx.fillRect(bx, by, bw, 14);
+        ctx.fillStyle = '#ff4757';
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * Math.max(0, boss.hp / boss.maxHp), 12, 6); ctx.fill(); }
+        else ctx.fillRect(bx + 1, by + 1, (bw - 2) * Math.max(0, boss.hp / boss.maxHp), 12);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText('👑 星球掠夺者', W / 2, by + 11);
+      }
+
       // 主角 DPS（左上，紧贴战绩行下方；与 Boss 血条在纵向错开，不会互相压）
       ctx.textAlign = 'left';
       ctx.font = 'bold 12px sans-serif';
       ctx.fillStyle = '#7ef9ff';
       ctx.fillText('DPS ' + Math.round(G.Player.dpsShow()), 22, 70);
 
-      // 「?」属性面板按钮（点击查看主角各项属性）
+      // 「?」属性面板按钮（点击查看主角各项属性；y 往下 20px 避开血条区）
       ctx.fillStyle = 'rgba(10,16,40,0.8)';
       ctx.beginPath();
-      ctx.arc(104, 65, 10, 0, Math.PI * 2);
+      ctx.arc(104, 85, 10, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = 'rgba(126,249,255,0.7)';
       ctx.lineWidth = 1.5;
@@ -135,10 +170,10 @@ var G = require('../boot.js');
       ctx.fillStyle = '#7ef9ff';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('?', 104, 69.5);
-      UI.reg('statinfo', 92, 53, 24, 24, function () {
+      ctx.fillText('?', 104, 89.5);
+      UI.reg('statinfo', 92, 73, 24, 24, function () {
         G.Audio.play('button');
-        Game.statsOpen = !Game.statsOpen;
+        G.game.statsOpen = !G.game.statsOpen;
       });
 
       // 吞噬者减益（「?」右侧顺排；纵向与 Boss 血条错开）
@@ -195,41 +230,6 @@ var G = require('../boot.js');
         G.Audio.play('button');
         game.setState('paused');
       });
-
-      // Boss 血条（世界吞噬者优先显示）
-      var dv = (G.Devourer && G.Devourer.active) ? G.Devourer.hpInfo() : null;
-      var boss = null;
-      if (!dv) {
-        for (var i = 0; i < G.Enemy.list.length; i++) if (G.Enemy.list[i].boss) { boss = G.Enemy.list[i]; break; }
-      }
-      if (dv && dv.max > 0) {
-        var bw = Math.min(340, W - 90);
-        var bx = (W - bw) / 2, by = 74;
-        UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(30,4,34,0.78)', 10);
-        ctx.fillStyle = '#3a0f38';
-        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); } else ctx.fillRect(bx, by, bw, 14);
-        ctx.fillStyle = '#b565c9';
-        var hk = Math.max(0, dv.cur / dv.max);
-        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * hk, 12, 6); ctx.fill(); }
-        else ctx.fillRect(bx + 1, by + 1, (bw - 2) * hk, 12);
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.fillText('世界吞噬者' + (dv.worms > 1 ? ' ×' + dv.worms : ''), W / 2, by + 11);
-      } else if (boss) {
-        var bw = Math.min(320, W - 100);
-        var bx = (W - bw) / 2, by = 74;
-        UI.pill(ctx, bx - 6, by - 4, bw + 12, 22, 'rgba(40,0,0,0.7)', 10);
-        ctx.fillStyle = '#3d0a0a';
-        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, 14, 7); ctx.fill(); } else ctx.fillRect(bx, by, bw, 14);
-        ctx.fillStyle = '#ff4757';
-        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx + 1, by + 1, (bw - 2) * Math.max(0, boss.hp / boss.maxHp), 12, 6); ctx.fill(); }
-        else ctx.fillRect(bx + 1, by + 1, (bw - 2) * Math.max(0, boss.hp / boss.maxHp), 12);
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.fillText('👑 星球掠夺者', W / 2, by + 11);
-      }
 
       // 底部按钮排
       var bh = 50, gap = 8;
