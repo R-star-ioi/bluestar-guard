@@ -95,8 +95,16 @@ var G = require('../boot.js');
       var table = (D && D.CODES) || {};
       var c = table[code];
       if (!c) return { ok: false, reason: 'invalid' };
-      // 开发者码：不占一次性名额，仅在局内（暂停中）生效
+      // 开发者码：不占一次性名额
       if (c.dev) {
+        // 资源型（钻石/金币）：主菜单 / 局内都可用，直接入账、可重复使用
+        if (c.diamonds || c.gold) {
+          if (c.diamonds) Meta.diamonds += c.diamonds;
+          if (c.gold) Meta.gold += c.gold;
+          Meta.save();
+          return { ok: true, dev: true, amount: c.diamonds || 0, msg: c.note || '开发者资源已到账' };
+        }
+        // 指令型（跳波 / 视界）：仅在局内（暂停中）生效
         var g = G.game;
         var inRun = g && (g.state === 'paused' || (g.state === 'settings' && g.settingsBack === 'paused'));
         if (!inRun) return { ok: false, reason: 'ingame' };

@@ -917,13 +917,14 @@ var G = require('../boot.js');
     nameOf: function (lv) { return D.LEVELS.NAMES[(lv - 1) % D.LEVELS.NAMES.length]; }
   };
 
-  D.VERSION = 'v0.5.41';
+  D.VERSION = 'v0.5.42';
 
   // ★ 兑换码（key 一律小写，输入时会自动转小写）；每个码每台设备只能用一次
   D.CODES = {
     lxsw666: { diamonds: 99999, note: '新手福利' },
     kfz001: { dev: true, note: '已跳到第 19 波（倒计时结束后打世界吞噬者）' },   // 开发者调试码，可重复使用
-    sdk001: { dev: true, effect: 'vision', note: '视界已拉满 Lv3（左下角显示视口调试数据）' }   // 开发者：扩视距调试码，可重复使用
+    sdk001: { dev: true, effect: 'vision', note: '视界已拉满 Lv3（左下角显示视口调试数据）' },   // 开发者：扩视距调试码，可重复使用
+    kfz666: { dev: true, diamonds: 999999, gold: 999999, note: '+999999 钻石　+999999 金币　已到账' }   // 开发者：资源包，可重复使用，主菜单/局内均可用
   };
   G.D = D;
 })();
@@ -1027,8 +1028,16 @@ var G = require('../boot.js');
       var table = (D && D.CODES) || {};
       var c = table[code];
       if (!c) return { ok: false, reason: 'invalid' };
-      // 开发者码：不占一次性名额，仅在局内（暂停中）生效
+      // 开发者码：不占一次性名额
       if (c.dev) {
+        // 资源型（钻石/金币）：主菜单 / 局内都可用，直接入账、可重复使用
+        if (c.diamonds || c.gold) {
+          if (c.diamonds) Meta.diamonds += c.diamonds;
+          if (c.gold) Meta.gold += c.gold;
+          Meta.save();
+          return { ok: true, dev: true, amount: c.diamonds || 0, msg: c.note || '开发者资源已到账' };
+        }
+        // 指令型（跳波 / 视界）：仅在局内（暂停中）生效
         var g = G.game;
         var inRun = g && (g.state === 'paused' || (g.state === 'settings' && g.settingsBack === 'paused'));
         if (!inRun) return { ok: false, reason: 'ingame' };
