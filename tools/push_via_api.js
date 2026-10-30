@@ -21,12 +21,19 @@ var TOKEN = process.env.GH_TOKEN;
 var REPO = 'R-star-ioi/bluestar-guard';
 
 var args = process.argv.slice(2);
-if (args.length && /^[0-9a-f]{7,40}$/i.test(args[0])) {
+// 兼容老用法：tag 位置出现 sha 且后面还有参数 → 忽略该 sha
+if (args.length >= 2 && /^[0-9a-f]{7,40}$/i.test(args[0])) {
   console.log('ignore legacy arg:', args.shift());
 }
-var TAG = args[0] || null;
-var TAG_MSG = args[1] || (TAG ? TAG + ' 发布' : null);
-var TARGET = args[2] || 'HEAD';   // 要推送的本地提交
+var TAG, TAG_MSG, TARGET = 'HEAD';
+if (args.length === 1 && /^[0-9a-f]{7,40}$/i.test(args[0])) {
+  // 新用法：单个 sha = 只推该提交，不建 tag
+  TARGET = args[0];
+} else {
+  TAG = args[0] || null;
+  TAG_MSG = args[1] || (TAG ? TAG + ' 发布' : null);
+  TARGET = args[2] || TARGET;
+}
 
 function git(a, raw) {
   return cp.execFileSync('git', a, { maxBuffer: 256 * 1024 * 1024, encoding: raw ? 'buffer' : 'utf8' });
@@ -142,10 +149,10 @@ function run() {
     });
 
     return chain.then(function (entries) {
-      // 删除的文件用 sha:null 从 base tree 中移除
+      // 删除的文件用 sha:null 从 base tree 中移除（删除条目 diff-tree 的新 mode 为 000000，须换成合法 mode）
       changedEntries(parent, sha).forEach(function (f) {
         if (f.sha === '0000000000000000000000000000000000000000') {
-          entries.push({ path: f.path, mode: f.mode, type: 'blob', sha: null });
+          entries.push({ path: f.path, mode: f.mode === '000000' ? '100644' : f.mode, type: 'blob', sha: null });
         }
       });
       return api('POST', 'git/trees', { base_tree: git(['rev-parse', parent + '^{tree}']).trim(), tree: entries });
